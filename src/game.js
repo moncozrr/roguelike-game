@@ -6,6 +6,7 @@ import { GAME_TITLE, PLAYER, DASH, WORLD, MAX_FRAME_TIME, NOTICE_DURATION, TIMEL
 import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
+import { createBoundary } from './boundary.js';
 
 // 밸런스 값은 config.js에서 관리한다. 아래는 이 파일에서 쓰기 쉬운 이름으로 옮겨 둔 것이다.
 const PLAYER_RADIUS = PLAYER.radius;
@@ -77,6 +78,15 @@ export function startGame(canvas) {
   let gameTime = devOptions.startTime; // 게임 시간(초). update에서만 증가하므로 정지 중에는 멈춘다.
   let notice = null; // 화면에 잠시 보여 줄 이벤트 알림 { text, remaining }
 
+  // 경계: 월드에 고정된 원. 중심은 플레이어가 시작한 위치이고 이후 플레이어를 따라다니지 않는다.
+  let boundary = createBoundary(startPosition);
+  let insideBoundary = boundary.contains(player); // 플레이어 중심이 경계 안(경계선 위 포함)인지
+
+  // 플레이어가 움직인 뒤 경계 안/밖 상태를 다시 계산한다. 체력/버프 등 효과는 아직 없다(단계 5, 10).
+  function refreshBoundaryState() {
+    insideBoundary = boundary.contains(player);
+  }
+
   // 새 런을 시작할 때 입력, 플레이어, 대시, 시간, 이벤트 기록을 모두 초기 상태로 되돌린다.
   function resetRun() {
     pressed.clear();
@@ -95,6 +105,8 @@ export function startGame(canvas) {
     player.x = startPosition.x;
     player.y = startPosition.y;
     clampPlayer();
+    boundary = createBoundary(player); // 새 런의 시작 위치에 경계를 고정(강화 레벨도 0으로 초기화)
+    refreshBoundaryState();
     gameTime = devOptions.startTime;
     timeline.reset();
     notice = null;
@@ -267,8 +279,51 @@ export function startGame(canvas) {
     ctx.fillRect(0, 0, size.width, size.height);
   }
 
-  // [검증용 임시 표식] 월드 고정 좌표가 카메라와 함께 일관되게 움직이는지 확인하기 위한 것.
-  // 월드 중앙 십자와 월드 가장자리 테두리. 경계 시스템(단계 3)이 들어오면 이 함수와 호출부를 지운다.
+  // 원형 경계. 월드 좌표로 그리므로 월드 레이어(카메라 변환 안)에서 호출해야 한다.
+  // 청록색 테두리와 옅은 내부 채움(임시 스타일). 플레이어 아래에 그리고 채움을 옅게 해서 가시성을 해치지 않는다.
+  // 중심과 반경을 매 프레임 boundary에서 읽으므로 반경이 강화되어도 이 함수는 바꿀 필요가 없다.
+  function drawBoundary() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(64, 190, 180, 0.07)';
+    ctx.strokeStyle = 'rgba(64, 200, 190, 0.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(boundary.center.x, boundary.center.y, boundary.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // [개발 모드 전용 검증 표식] 월드 좌표 200px 간격 교차점마다 작은 십자를 그린다(프로덕션 빌드에서는 코드째 제거).
+  // 카메라/창 크기와 무관하게 월드에 고정되어 보이는지 확인하는 용도다. 화면에 보이는 영역의 십자만 그린다.
+  const DEBUG_GRID_STEP = 200;
+  const DEBUG_CROSS_HALF = 5;
+  function drawDebugGridCrosses(view) {
+    const pad = DEBUG_CROSS_HALF + 1;
+    const firstX = Math.max(Math.ceil((view.left - pad) / DEBUG_GRID_STEP), 0);
+    const lastX = Math.min(Math.floor((view.right + pad) / DEBUG_GRID_STEP), WORLD.width / DEBUG_GRID_STEP);
+    const firstY = Math.max(Math.ceil((view.top - pad) / DEBUG_GRID_STEP), 0);
+    const lastY = Math.min(Math.floor((view.bottom + pad) / DEBUG_GRID_STEP), WORLD.height / DEBUG_GRID_STEP);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(232, 230, 227, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let ix = firstX; ix <= lastX; ix++) {
+      for (let iy = firstY; iy <= lastY; iy++) {
+        const x = ix * DEBUG_GRID_STEP;
+        const y = iy * DEBUG_GRID_STEP;
+        ctx.moveTo(x - DEBUG_CROSS_HALF, y);
+        ctx.lineTo(x + DEBUG_CROSS_HALF, y);
+        ctx.moveTo(x, y - DEBUG_CROSS_HALF);
+        ctx.lineTo(x, y + DEBUG_CROSS_HALF);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // [개발 모드 전용 검증 표식] 월드 고정 좌표가 카메라와 함께 일관되게 움직이는지 확인하기 위한 것.
+  // 월드 중앙 십자와 월드 가장자리 테두리. 검증이 끝나면 이 함수와 호출부를 지운다.
   // 월드 좌표로 그리므로 월드 레이어(카메라 변환 안)에서 호출해야 한다.
   function drawWorldMarkers() {
     ctx.save();
@@ -349,6 +404,8 @@ export function startGame(canvas) {
     ctx.font = '12px monospace';
     ctx.fillText(`player (${player.x.toFixed(1)}, ${player.y.toFixed(1)})`, 12, 12);
     ctx.fillText(`camera (${cam.x.toFixed(1)}, ${cam.y.toFixed(1)})`, 12, 28);
+    const dist = boundary.distanceTo(player).toFixed(1);
+    ctx.fillText(`boundary: ${insideBoundary ? 'inside' : 'outside'} (d=${dist} / r=${boundary.radius})`, 12, 44);
     ctx.restore();
   }
 
@@ -412,7 +469,12 @@ export function startGame(canvas) {
     // 월드 레이어: 월드 좌표 그대로 그리고, 카메라만큼 평행 이동해서 화면에 놓는다.
     ctx.save();
     ctx.translate(-cam.x, -cam.y);
-    drawWorldMarkers(); // [검증용 임시 표식]
+    drawBoundary();
+    if (import.meta.env.DEV) {
+      // [개발 모드 전용 검증 표식] 프로덕션 빌드에서는 코드째 제거된다.
+      drawDebugGridCrosses(viewRect(cam, size));
+      drawWorldMarkers();
+    }
     drawPlayer();
     ctx.restore();
 
@@ -425,7 +487,10 @@ export function startGame(canvas) {
     // lastTime은 정지 중에도 매 프레임 갱신하므로, 재개 직후 첫 dt가 정지 시간만큼 커지지 않는다.
     const dt = Math.min((now - lastTime) / 1000, MAX_FRAME_TIME);
     lastTime = now;
-    if (state.is(STATES.PLAYING)) update(dt); // 게임 진행 관련 업데이트는 실행 중에만
+    if (state.is(STATES.PLAYING)) {
+      update(dt); // 게임 진행 관련 업데이트는 실행 중에만
+      refreshBoundaryState(); // 이동/대시가 끝난 위치 기준으로 경계 안/밖 갱신
+    }
     draw();
     requestAnimationFrame(frame);
   }
