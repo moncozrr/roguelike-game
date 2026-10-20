@@ -1,0 +1,36 @@
+// 게임 상태(ready / playing / paused / gameover)와 전환 규칙.
+// 화면(DOM)에 의존하지 않는다. 표에 없는 전환 요청은 상태를 바꾸지 않고 무시한다.
+
+export const STATES = {
+  READY: 'ready',
+  PLAYING: 'playing',
+  PAUSED: 'paused',
+  GAMEOVER: 'gameover',
+};
+
+// 현재 상태 -> { 동작: 다음 상태 }
+const TRANSITIONS = {
+  [STATES.READY]: { start: STATES.PLAYING },
+  [STATES.PLAYING]: { pause: STATES.PAUSED, gameOver: STATES.GAMEOVER },
+  [STATES.PAUSED]: { resume: STATES.PLAYING },
+  [STATES.GAMEOVER]: { start: STATES.PLAYING },
+};
+
+export function createGameState(initial = STATES.READY) {
+  let current = initial;
+  return {
+    get current() {
+      return current;
+    },
+    is(state) {
+      return current === state;
+    },
+    // 전환에 성공하면 true, 허용되지 않은 요청이면 false(상태는 그대로).
+    send(action) {
+      const next = TRANSITIONS[current]?.[action];
+      if (!next) return false;
+      current = next;
+      return true;
+    },
+  };
+}

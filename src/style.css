@@ -31,13 +31,6 @@ body {
   letter-spacing: 0.2em;
 }
 
-.subtitle {
-  margin: 0;
-  color: #8a8794;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-}
-
 .game-frame {
   flex: 1;
   width: 100%;
