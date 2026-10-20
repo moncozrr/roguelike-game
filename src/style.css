@@ -10,20 +10,24 @@ body {
   font-family: system-ui, 'Malgun Gothic', sans-serif;
 }
 
-.title-screen {
-  min-height: 100vh;
+.game-screen {
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  text-align: center;
+  gap: 0.75rem;
   padding: 1rem;
 }
 
-.title {
+.game-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.game-title {
   margin: 0;
-  font-size: clamp(2.5rem, 8vw, 5rem);
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
   letter-spacing: 0.2em;
 }
 
@@ -34,11 +38,26 @@ body {
   text-transform: uppercase;
 }
 
-.status {
-  margin-top: 2rem;
-  padding: 0.25rem 0.75rem;
+.game-frame {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  min-height: 0;
+  padding: 4px;
   border: 1px solid #c9a24a;
   border-radius: 4px;
-  color: #c9a24a;
+  background: #0a0a0e;
+  box-shadow: 0 0 24px rgba(201, 162, 74, 0.12);
+}
+
+.game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.controls {
+  margin: 0;
+  color: #8a8794;
   font-size: 0.875rem;
 }
