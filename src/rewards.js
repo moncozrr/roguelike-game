@@ -91,22 +91,22 @@ export function applyReward(reward, { weapons, experience }) {
   }
 }
 
-// 연속 레벨업 진행. 레벨업 횟수를 쌓아 두고 보상 화면을 한 번에 하나씩 연다.
-//   - addLevelUps(n): 레벨업 n번을 대기열에 더한다.
-//   - advance(): 화면이 열려 있지 않으면 다음 화면을 연다. 후보가 하나도 없는 레벨업은 보상 없이 건너뛴다.
+// 보상 화면 진행(일반 레벨업과 경계 강화가 함께 쓴다). 화면을 열어야 할 횟수를 쌓아 두고 한 번에 하나씩 연다.
+//   - addPending(n): 화면 n번을 대기열에 더한다(레벨업이면 addLevelUps와 같다).
+//   - advance(): 화면이 열려 있지 않으면 다음 화면을 연다. 후보가 하나도 없으면 보상 없이 건너뛴다.
 //     화면이 열려 있으면 true.
 //   - select(index): 지금 표시 중인 후보의 번호(0부터)를 고른다. 유효하면 보상을 한 번만 적용하고, 다음 화면을 연다.
 //     표시되지 않은 번호, 숫자가 아닌 값, 이미 처리된 선택은 무시하고 false를 돌려준다.
-// 후보는 화면을 열 때마다 그 시점의 상태로 새로 계산한다(직전 선택 결과가 반영된다).
-export function createLevelUpFlow({ weapons, experience, rng = Math.random, maxCandidates = 3 }) {
-  let pending = 0; // 아직 화면을 열지 않은 레벨업 수
+// build(): 후보 목록을 새로 만든다(화면을 열 때마다 그 시점의 상태로 계산). apply(reward): 보상을 적용하고 성공 여부를 돌려준다.
+export function createRewardFlow({ build, apply }) {
+  let pending = 0; // 아직 화면을 열지 않은 횟수
   let candidates = null; // 표시 중인 후보 목록. 화면이 없으면 null
 
   function advance() {
     while (!candidates && pending > 0) {
       pending -= 1;
-      const next = buildCandidates({ weapons, experience, rng, maxCandidates });
-      if (next.length > 0) candidates = next; // 후보가 0개면 이 레벨업은 건너뛴다(무한 대기 없음)
+      const next = build();
+      if (next.length > 0) candidates = next; // 후보가 0개면 건너뛴다(무한 대기 없음)
     }
     return candidates !== null;
   }
@@ -121,7 +121,7 @@ export function createLevelUpFlow({ weapons, experience, rng = Math.random, maxC
     get pending() {
       return pending;
     },
-    addLevelUps(count) {
+    addPending(count) {
       if (Number.isInteger(count) && count > 0) pending += count;
     },
     advance,
@@ -129,7 +129,7 @@ export function createLevelUpFlow({ weapons, experience, rng = Math.random, maxC
       if (!candidates || !Number.isInteger(index) || index < 0 || index >= candidates.length) return false;
       const reward = candidates[index];
       candidates = null; // 먼저 비워서 같은 화면에서 두 번 적용되지 않게 한다.
-      const applied = applyReward(reward, { weapons, experience });
+      const applied = apply(reward);
       advance();
       return applied;
     },
@@ -138,4 +138,14 @@ export function createLevelUpFlow({ weapons, experience, rng = Math.random, maxC
       candidates = null;
     },
   };
+}
+
+// 연속 레벨업 진행: 레벨업 횟수를 쌓아 두고 보상 화면을 한 번에 하나씩 연다. 후보는 화면을 열 때마다 새로 계산한다.
+export function createLevelUpFlow({ weapons, experience, rng = Math.random, maxCandidates = 3 }) {
+  const flow = createRewardFlow({
+    build: () => buildCandidates({ weapons, experience, rng, maxCandidates }),
+    apply: (reward) => applyReward(reward, { weapons, experience }),
+  });
+  flow.addLevelUps = flow.addPending;
+  return flow;
 }

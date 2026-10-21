@@ -178,7 +178,7 @@ export function updateEnemies(enemies, dt, player, { config = ENEMY, world = WOR
     const dist = Math.hypot(dx, dy);
     if (dist > 0) {
       // 남은 거리보다 멀리 가지 않게 해서 플레이어 위치를 지나쳐 앞뒤로 떨지 않게 한다.
-      const step = Math.min(config.speed * dt, dist);
+      const step = Math.min((e.speed ?? config.speed) * dt, dist); // 적마다 속도를 따로 가질 수 있다(보스)
       e.x += (dx / dist) * step;
       e.y += (dy / dist) * step;
     }

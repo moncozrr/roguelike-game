@@ -4,6 +4,7 @@
 
 import { radiusForLevel } from './boundary.js';
 import { BOUNDARY } from './config.js';
+import { createRewardFlow } from './rewards.js';
 
 export const BOUNDARY_REWARD_KINDS = { RADIUS: 'boundaryRadius' };
 
@@ -47,4 +48,15 @@ export function applyBoundaryReward(reward, { boundary, rules = BOUNDARY }) {
     return true;
   }
   return false;
+}
+
+// 경계 강화 화면 진행. 중간 보스 처치마다 addUpgrades(1)로 화면 하나를 예약하고, 일반 레벨업 후보와는 완전히 따로 동작한다.
+// 적용할 수 있는 강화가 없으면(예: 반경이 이미 최대) 화면 없이 건너뛴다.
+export function createBoundaryUpgradeFlow({ boundary, rng = Math.random, maxCandidates = 3, rules = BOUNDARY }) {
+  const flow = createRewardFlow({
+    build: () => buildBoundaryCandidates({ boundary, rng, maxCandidates, rules }),
+    apply: (reward) => applyBoundaryReward(reward, { boundary, rules }),
+  });
+  flow.addUpgrades = flow.addPending;
+  return flow;
 }

@@ -13,6 +13,8 @@ import { createWeaponSystem } from './weapons.js';
 import { createEnemyProjectileSystem } from './enemyProjectiles.js';
 import { createExperience } from './experience.js';
 import { createLevelUpFlow } from './rewards.js';
+import { createBoundaryUpgradeFlow } from './boundaryRewards.js';
+import { createMiniBoss, miniBossSpawnPosition, isMiniBoss } from './boss.js';
 import { computeCardLayout, hitTestCards, keyToCardIndex, pointerToCanvas } from './rewardCards.js';
 import { drawRewardCards } from './rewardCardsView.js';
 import { createPlayerHealth, anyContact } from './combat.js';
@@ -118,20 +120,41 @@ export function startGame(canvas) {
   // 경험치 구슬/레벨/자석과 레벨업 보상 선택. 선택 화면(levelup 상태)이 열려 있는 동안은 게임이 갱신되지 않는다.
   const experience = createExperience();
   const levelUp = createLevelUpFlow({ weapons, experience });
+  // 경계 강화: 중간 보스를 처치했을 때만 예약된다(일반 레벨업 후보와 섞이지 않는 별도 흐름). 경계가 새 런마다 다시 만들어지므로 흐름도 함께 다시 만든다.
+  let boundaryUpgrades = createBoundaryUpgradeFlow({ boundary });
+
+  // 지금 화면에 열려 있는 보상 흐름과 제목. 경계 강화가 일반 레벨업보다 먼저 열린다. 열린 화면이 없으면 null.
+  function currentReward() {
+    if (boundaryUpgrades.active) return { flow: boundaryUpgrades, title: 'BOUNDARY UPGRADE' };
+    if (levelUp.active) return { flow: levelUp, title: 'LEVEL UP' };
+    return null;
+  }
 
   // 무기를 갱신하고, 이번 공격으로 죽은 적을 목록에서 제거한다(제거된 적은 이후 이동/밀어내기/접촉/생성 수 계산에서 빠진다).
   // 제거되는 적마다 경험치 구슬을 한 개 만든다(한 적에게서는 한 번만).
   function updateWeaponSystem(dt) {
     // 경계 안에 있는 동안 공격력 버프(내구도에 따라 약해짐)가 발동하는 공격에 적용된다.
     weapons.update(dt, player, enemies, attackMultiplier(boundary, player, 'player'));
-    removeDeadEnemies(enemies, (enemy) => experience.spawnOrbFor(enemy));
+    removeDeadEnemies(enemies, (enemy) => {
+      experience.spawnOrbFor(enemy);
+      // 중간 보스가 죽어서 목록에서 제거되는 순간 한 번만 경계 강화 화면을 예약한다(일반 적은 해당 없음).
+      if (isMiniBoss(enemy) && !enemy.bossRewardGiven) {
+        enemy.bossRewardGiven = true;
+        boundaryUpgrades.addUpgrades(1);
+      }
+    });
   }
 
   // 구슬을 줍고, 레벨이 올랐으면 보상 선택 화면을 연다. 게임이 실행 중일 때만 불린다.
   function openLevelUpIfNeeded(levelsGained) {
-    if (levelsGained <= 0) return;
-    levelUp.addLevelUps(levelsGained);
-    if (levelUp.advance() && state.send('levelUp')) dashRequested = false; // 선택 중에는 대시 요청을 쌓지 않는다.
+    if (levelsGained > 0) levelUp.addLevelUps(levelsGained);
+    openRewardScreenIfNeeded();
+  }
+
+  // 예약된 보상이 있으면 화면을 열고 levelup 상태로 바꾼다(경계 강화 먼저, 그다음 레벨업). 후보가 없는 예약은 건너뛴다.
+  function openRewardScreenIfNeeded() {
+    if (!state.is(STATES.PLAYING)) return;
+    if ((boundaryUpgrades.advance() || levelUp.advance()) && state.send('levelUp')) dashRequested = false; // 선택 중에는 대시 요청을 쌓지 않는다.
   }
 
   function updateExperience() {
@@ -147,9 +170,11 @@ export function startGame(canvas) {
   // 표시되지 않은 번호나 이미 처리된 선택은 무시한다. 선택하면 보상은 즉시 적용되고 짧은 강조 뒤에 화면이 넘어간다.
   function selectReward(index) {
     if (!state.is(STATES.LEVELUP) || rewardFlash) return;
-    const cards = levelUp.candidates;
-    if (!levelUp.select(index)) return;
-    rewardFlash = { cards, index, remaining: REWARD_FLASH_DURATION };
+    const screen = currentReward();
+    if (!screen) return;
+    const cards = screen.flow.candidates;
+    if (!screen.flow.select(index)) return;
+    rewardFlash = { cards, index, title: screen.title, remaining: REWARD_FLASH_DURATION };
   }
 
   // 강조 시간이 지나면 더 열 화면이 없을 때만 전투로 돌아간다(레벨업 상태 전환은 기존 상태 기계를 쓴다).
@@ -158,14 +183,18 @@ export function startGame(canvas) {
     rewardFlash.remaining -= dt;
     if (rewardFlash.remaining > 0) return;
     rewardFlash = null;
-    if (!levelUp.active) state.send('rewardDone');
+    // 같은 종류의 다음 화면은 select에서 이미 열렸다. 다른 종류의 예약(레벨업 등)이 남았으면 그 화면을 열고, 없으면 전투를 재개한다.
+    if (currentReward()) return;
+    if (!(boundaryUpgrades.advance() || levelUp.advance())) state.send('rewardDone');
   }
 
   // 카드 영역 클릭. 그려진 카드와 같은 배치 계산(computeCardLayout)으로 판정하므로 어긋나지 않는다.
   function onCanvasClick(e) {
     if (!state.is(STATES.LEVELUP) || rewardFlash) return;
     const point = pointerToCanvas(e, canvas.getBoundingClientRect(), size);
-    const index = hitTestCards(computeCardLayout(levelUp.candidates.length, size), point.x, point.y);
+    const screen = currentReward();
+    if (!screen) return;
+    const index = hitTestCards(computeCardLayout(screen.flow.candidates.length, size), point.x, point.y);
     if (index >= 0) selectReward(index);
   }
 
@@ -199,6 +228,12 @@ export function startGame(canvas) {
     updateEnemies(enemies, dt, player);
   }
 
+  // 중간 보스를 화면 밖 고리 위에 만든다. 일반 적과 같은 목록에 들어가 같은 이동/피해/제거 규칙을 따른다.
+  function spawnMiniBoss() {
+    const p = miniBossSpawnPosition(player, size);
+    enemies.push(createMiniBoss(nextEnemyId++, p.x, p.y, player));
+  }
+
   // 새 런을 시작할 때 입력, 플레이어, 대시, 시간, 이벤트 기록을 모두 초기 상태로 되돌린다.
   function resetRun() {
     pressed.clear();
@@ -225,6 +260,7 @@ export function startGame(canvas) {
     enemyProjectiles.reset(); // 적 투사체를 모두 지움(원거리 적 쿨다운은 적 목록과 함께 지워짐)
     experience.reset(); // 구슬, 경험치, 레벨, 자석을 초기화
     levelUp.reset(); // 대기 중인 보상과 열려 있던 후보를 지움
+    boundaryUpgrades = createBoundaryUpgradeFlow({ boundary }); // 새 경계에 연결된 새 흐름(예약된 경계 강화도 지움)
     rewardFlash = null;
     weapons.reset(); // 투사체/효과를 지우고 무기를 시작 구성(레벨 1, 쿨다운 0)으로 되돌림
     health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
@@ -317,6 +353,7 @@ export function startGame(canvas) {
     gameTime += dt * devOptions.speed;
     for (const event of timeline.update(gameTime)) {
       notice = { text: EVENT_MESSAGES[event.id], remaining: NOTICE_DURATION };
+      if (event.id === 'midBoss') spawnMiniBoss(); // 타임라인은 이벤트를 런마다 한 번만 발동하므로 보스도 한 번만 나온다.
       if (import.meta.env.DEV) console.log(`[timeline] ${event.id} @ ${formatTime(gameTime)}`);
     }
     if (notice) {
@@ -630,7 +667,8 @@ export function startGame(canvas) {
       lines = ['Esc / Enter 눌러서 재개'];
     } else if (state.is(STATES.LEVELUP)) {
       // 보상 선택 화면은 카드 UI가 그린다. 강조 중에는 방금 보여 준 카드에서 고른 카드를 강조한다.
-      drawRewardCards(ctx, size, rewardFlash ? { title: 'LEVEL UP', cards: rewardFlash.cards, selectedIndex: rewardFlash.index } : { title: 'LEVEL UP', cards: levelUp.candidates });
+      const screen = currentReward();
+      drawRewardCards(ctx, size, rewardFlash ? { title: rewardFlash.title, cards: rewardFlash.cards, selectedIndex: rewardFlash.index } : { title: screen?.title ?? 'LEVEL UP', cards: screen?.flow.candidates ?? [] });
       return;
     } else if (state.is(STATES.GAMEOVER)) {
       title = '게임 오버';
@@ -720,6 +758,25 @@ export function startGame(canvas) {
     ctx.restore();
   }
 
+  // 보스 표시(임시): 금색 고리와 머리 위 HP 바. 일반 적/원거리 적과 구분된다.
+  function drawBossMarker(e) {
+    const half = (ENEMY.displaySize * BOSS.sizeScale) / 2;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(240, 190, 70, 0.95)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + ENEMY_RADIUS * 0.9, ENEMY_RADIUS * 1.6, ENEMY_RADIUS * 0.6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    const w = 60;
+    const x = e.x - w / 2;
+    const y = e.y - half - 12;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - 1, y - 1, w + 2, 7);
+    ctx.fillStyle = '#e0a040';
+    ctx.fillRect(x, y, (w * e.hp) / e.maxHp, 5);
+    ctx.restore();
+  }
+
   // 적 투사체(임시 스타일: 보라색 구체). 플레이어 투사체와 색으로 구분한다.
   function drawEnemyProjectiles() {
     ctx.save();
@@ -804,6 +861,7 @@ export function startGame(canvas) {
     const drawEnemy = (e) => {
       enemySprites.draw(ctx, e.x, e.y, e.facing, snap, e.isBoss ? BOSS.sizeScale : 1);
       if (e.kind === 'ranged') drawRangedMarker(e);
+      if (e.isBoss) drawBossMarker(e);
     };
     for (; i < order.length && order[i].y < player.y; i++) drawEnemy(order[i]);
     drawPlayerWithHitBlink();
@@ -854,6 +912,7 @@ export function startGame(canvas) {
       updateEnemyProjectileSystem(dt); // 원거리 적 발사와 투사체 명중(적 이동 후, 접촉 피해 전)
       updateContactDamage(); // 이동이 끝난 위치 기준 접촉 피해. HP 0이면 여기서 게임 오버가 된다.
       if (state.is(STATES.PLAYING)) updateExperience(); // 마지막에 구슬 줍기. 게임 오버가 난 프레임에는 줍지 않는다.
+      openRewardScreenIfNeeded(); // 이번 프레임에 예약된 보상(보스 처치 등) 화면. 같은 프레임의 레벨업과 순서대로 이어진다.
     }
     draw();
     requestAnimationFrame(frame);
@@ -953,7 +1012,7 @@ export function startGame(canvas) {
   if (import.meta.env.DEV) {
     // [개발 모드 전용] 자동 통합 테스트(tests/gameIntegration.test.js)가 게임 상태를 읽고 시험 상황을 만들기 위한 핸들.
     // 프로덕션 빌드에서는 코드째 제거된다(tests/prodBuild.test.js가 확인).
-    window.__nineBorders = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime, boundary: () => boundary };
+    window.__nineBorders = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime, boundary: () => boundary, boundaryUpgrades: () => boundaryUpgrades };
   }
 
   new ResizeObserver(resize).observe(canvas);
