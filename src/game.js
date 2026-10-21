@@ -2,13 +2,14 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
-import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
+import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
 import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
 import { createBoundary } from './boundary.js';
 import { createEnemy, updateEnemies, enemyRadius, removeDeadEnemies } from './enemy.js';
 import { createWeaponSystem } from './weapons.js';
+import { createEnemyProjectileSystem } from './enemyProjectiles.js';
 import { createPlayerHealth, anyContact } from './combat.js';
 import { createSpawner } from './spawner.js';
 import { createEnemySprites } from './enemySprites.js';
@@ -114,6 +115,21 @@ export function startGame(canvas) {
     removeDeadEnemies(enemies);
   }
 
+  // 원거리 적의 투사체. 게임이 실행 중일 때만 갱신되므로 정지/게임 오버에서는 쿨다운과 투사체가 멈춘다.
+  const enemyProjectiles = createEnemyProjectileSystem();
+
+  // 원거리 적 발사와 투사체 이동/명중. 명중하면 투사체는 사라지고, 피해는 접촉과 같은 보호 규칙(피격 후 보호, 대시 무적)을 따른다.
+  function updateEnemyProjectileSystem(dt) {
+    enemyProjectiles.update(dt, {
+      player,
+      playerRadius: PLAYER_RADIUS,
+      enemies,
+      onHit: (damage) => {
+        if (health.takeDamage(damage) && health.isDead) state.send('gameOver');
+      },
+    });
+  }
+
   // 적과 닿았으면 피해를 한 번 시도한다(여러 마리가 닿아도 한 번). HP가 0이 되면 게임 오버.
   // 게임이 실행 중일 때만 불리고, 대시 중에도 불린다(update()의 대시 조기 반환과 무관한 위치에서 호출).
   function updateContactDamage() {
@@ -125,7 +141,7 @@ export function startGame(canvas) {
   function updateEnemySystem(dt) {
     const cam = computeCamera(player, size, WORLD);
     const spawned = spawner.update(dt, { gameTime, enemyCount: enemies.length, cam, view: size });
-    for (const p of spawned) enemies.push(createEnemy(nextEnemyId++, p.x, p.y, player));
+    for (const p of spawned) enemies.push(createEnemy(nextEnemyId++, p.x, p.y, player, ENEMY, p.kind));
     updateEnemies(enemies, dt, player);
   }
 
@@ -152,6 +168,7 @@ export function startGame(canvas) {
     enemies.length = 0; // 이전 런의 적과 생성기 상태(타이머, 소수 이월값)를 모두 지운다.
     nextEnemyId = 1;
     spawner.reset();
+    enemyProjectiles.reset(); // 적 투사체를 모두 지움(원거리 적 쿨다운은 적 목록과 함께 지워짐)
     weapons.reset(); // 투사체/효과를 지우고 무기를 시작 구성(레벨 1, 쿨다운 0)으로 되돌림
     health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
     gameTime = devOptions.startTime;
@@ -460,6 +477,7 @@ export function startGame(canvas) {
     ctx.fillText(`boundary: ${insideBoundary ? 'inside' : 'outside'} (d=${dist} / r=${boundary.radius})`, 12, 44);
     ctx.fillText(`enemies: ${enemies.length} / ${SPAWN.maxEnemies}`, 12, 60);
     ctx.fillText(`weapons: ${weapons.slots.map((w) => `${w.id} Lv${w.level} cd ${w.cooldown.toFixed(2)}`).join(' | ')}  projectiles: ${weapons.projectiles.length}`, 12, 92);
+    ctx.fillText(`enemy projectiles: ${enemyProjectiles.projectiles.length}`, 12, 108);
     ctx.fillText(`hp: ${health.hp} / ${health.maxHp}  protect: ${health.hitProtection.toFixed(2)}  dashInv: ${health.dashInvuln.toFixed(2)}`, 12, 76);
     ctx.restore();
   }
@@ -565,6 +583,41 @@ export function startGame(canvas) {
     ctx.restore();
   }
 
+  // 원거리 적 표시(임시): 원혼 그림 위에 보라색 마름모와 발밑 고리를 덧그려 일반 적과 구분한다.
+  function drawRangedMarker(e) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(190, 110, 230, 0.9)';
+    ctx.fillStyle = 'rgba(190, 110, 230, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + ENEMY_RADIUS * 0.9, ENEMY_RADIUS * 1.1, ENEMY_RADIUS * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    const top = e.y - ENEMY.displaySize / 2 - 4;
+    ctx.beginPath();
+    ctx.moveTo(e.x, top - 6);
+    ctx.lineTo(e.x + 5, top);
+    ctx.lineTo(e.x, top + 6);
+    ctx.lineTo(e.x - 5, top);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 적 투사체(임시 스타일: 보라색 구체). 플레이어 투사체와 색으로 구분한다.
+  function drawEnemyProjectiles() {
+    ctx.save();
+    ctx.fillStyle = '#d58cf0';
+    ctx.strokeStyle = '#7a2fa0';
+    ctx.lineWidth = 2;
+    for (const p of enemyProjectiles.projectiles) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, ENEMY_PROJECTILE.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // 투사체(임시 스타일: 작은 밝은 원). 적과 플레이어 위에 그린다.
   function drawProjectiles() {
     ctx.save();
@@ -586,9 +639,13 @@ export function startGame(canvas) {
     const snap = { camX: cam.x, camY: cam.y, dpr: pixelRatio }; // 도트 그림을 정수 픽셀에 맞춰 그리기 위한 값
     const order = enemies.slice().sort((a, b) => a.y - b.y); // 그리기 순서만 정렬하고 원래 목록은 건드리지 않는다.
     let i = 0;
-    for (; i < order.length && order[i].y < player.y; i++) enemySprites.draw(ctx, order[i].x, order[i].y, order[i].facing, snap);
+    const drawEnemy = (e) => {
+      enemySprites.draw(ctx, e.x, e.y, e.facing, snap);
+      if (e.kind === 'ranged') drawRangedMarker(e);
+    };
+    for (; i < order.length && order[i].y < player.y; i++) drawEnemy(order[i]);
     drawPlayerWithHitBlink();
-    for (; i < order.length; i++) enemySprites.draw(ctx, order[i].x, order[i].y, order[i].facing, snap);
+    for (; i < order.length; i++) drawEnemy(order[i]);
   }
 
   function draw() {
@@ -611,6 +668,7 @@ export function startGame(canvas) {
     drawWeaponEffects();
     drawEntities(cam); // 적(경계 위)과 플레이어
     drawProjectiles();
+    drawEnemyProjectiles();
     ctx.restore();
 
     // 화면 레이어: HUD와 오버레이는 화면에 고정된다.
@@ -627,6 +685,7 @@ export function startGame(canvas) {
       refreshBoundaryState(); // 이동/대시가 끝난 위치 기준으로 경계 안/밖 갱신
       updateWeaponSystem(dt); // 자동 공격과 투사체, 죽은 적 제거(이동이 끝난 플레이어 위치 기준)
       updateEnemySystem(dt); // 적 생성과 이동(플레이어 위치 기준)
+      updateEnemyProjectileSystem(dt); // 원거리 적 발사와 투사체 명중(적 이동 후, 접촉 피해 전)
       updateContactDamage(); // 이동이 끝난 위치 기준 접촉 피해. HP 0이면 여기서 게임 오버가 된다.
     }
     draw();

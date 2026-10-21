@@ -1,7 +1,7 @@
 // 일반 적의 데이터와 행동(플레이어 추적, 적끼리 밀어내기). 화면(DOM)에 의존하지 않고 모두 월드 좌표로 다룬다.
 // 플레이어와 적은 서로 통과한다. 적은 HP를 갖고, 피해로 HP가 0 이하가 되면 죽은 것으로 표시되어 목록에서 제거된다(보상 없음).
 
-import { ENEMY, WORLD } from './config.js';
+import { ENEMY, ENEMY_PROJECTILE, WORLD } from './config.js';
 
 // 충돌(밀어내기) 반지름. 표시 크기와는 별개의 값이다.
 export function enemyRadius(config = ENEMY) {
@@ -15,8 +15,11 @@ export function facingToward(previous, dx, deadZone = ENEMY.facingDeadZone) {
 }
 
 // 적을 만든다. 최초 방향은 플레이어 쪽이다(수평 거리가 거의 0이면 'right').
-export function createEnemy(id, x, y, player, config = ENEMY) {
-  return { id, x, y, facing: facingToward('right', player.x - x, config.facingDeadZone), hp: config.maxHp, maxHp: config.maxHp, dead: false };
+// kind: 'melee'(기본) 또는 'ranged'. 원거리 적은 발사 쿨다운(shotCooldown)을 갖고, 이동 AI는 일반 적과 같다.
+export function createEnemy(id, x, y, player, config = ENEMY, kind = 'melee') {
+  const enemy = { id, x, y, kind, facing: facingToward('right', player.x - x, config.facingDeadZone), hp: config.maxHp, maxHp: config.maxHp, dead: false };
+  if (kind === 'ranged') enemy.shotCooldown = ENEMY_PROJECTILE.cooldown;
+  return enemy;
 }
 
 // 적에게 피해를 한 번 준다. 이미 죽은 적이거나 피해가 0 이하/유한하지 않으면 아무것도 바꾸지 않고 null을 돌려준다.

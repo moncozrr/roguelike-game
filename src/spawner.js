@@ -73,7 +73,7 @@ export function createSpawner({ rng = Math.random, config = SPAWN, enemyConfig =
           break;
         }
       }
-      positions.push({ x: chosen.x, y: chosen.y });
+      positions.push({ x: chosen.x, y: chosen.y, kind: rng() < config.rangedChance ? 'ranged' : 'melee' });
     }
     return positions;
   }

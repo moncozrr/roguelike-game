@@ -76,13 +76,17 @@ export function createPlayerHealth({ config = PLAYER_HEALTH, dashInvulnDuration 
     startDashInvulnerability() {
       dashInvuln = dashInvulnDuration;
     },
-    // 접촉 피해 1회를 시도한다. 적용되면 true. 막혔으면 false(HP와 타이머 모두 변하지 않음).
-    // 적용되면 HP가 줄고(0 미만으로는 내려가지 않음) 피격 후 보호 시간이 시작된다.
-    takeContactDamage() {
-      if (!this.canTakeDamage) return false;
-      hp = Math.max(0, hp - config.contactDamage);
+    // 피해 1회를 시도한다(접촉, 적 투사체 공통). 적용되면 true. 막혔으면 false(HP와 타이머 모두 변하지 않음).
+    // 적용되면 HP가 줄고(0 미만으로는 내려가지 않음) 피격 후 보호 시간이 시작된다. 올바르지 않은 피해량은 무시한다.
+    takeDamage(amount) {
+      if (!Number.isFinite(amount) || amount < 0 || !this.canTakeDamage) return false;
+      hp = Math.max(0, hp - amount);
       protection = config.hitProtection;
       return true;
+    },
+    // 접촉 피해 1회(설정된 접촉 피해량)를 시도한다. 규칙은 takeDamage와 같다.
+    takeContactDamage() {
+      return this.takeDamage(config.contactDamage);
     },
     // 새 런을 시작할 때 HP와 두 타이머를 초기 상태로 되돌린다.
     reset() {
