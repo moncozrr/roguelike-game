@@ -14,7 +14,7 @@ import { createEnemyProjectileSystem } from './enemyProjectiles.js';
 import { createExperience } from './experience.js';
 import { createLevelUpFlow } from './rewards.js';
 import { createBoundaryUpgradeFlow } from './boundaryRewards.js';
-import { createMiniBoss, miniBossSpawnPosition, isMiniBoss } from './boss.js';
+import { createMiniBoss, createFinalBoss, miniBossSpawnPosition, isMiniBoss, isFinalBoss } from './boss.js';
 import { computeCardLayout, hitTestCards, keyToCardIndex, pointerToCanvas } from './rewardCards.js';
 import { drawRewardCards } from './rewardCardsView.js';
 import { createPlayerHealth, anyContact } from './combat.js';
@@ -123,6 +123,10 @@ export function startGame(canvas) {
   // 경계 강화: 중간 보스를 처치했을 때만 예약된다(일반 레벨업 후보와 섞이지 않는 별도 흐름). 경계가 새 런마다 다시 만들어지므로 흐름도 함께 다시 만든다.
   let boundaryUpgrades = createBoundaryUpgradeFlow({ boundary });
 
+  // 최종 보스를 처치했는지(이번 프레임에 승리로 넘길 표시)와 이번 런에서 이미 출현시켰는지. 새 런에서 초기화된다.
+  let finalBossDefeated = false;
+  let finalBossSpawned = false;
+
   // 지금 화면에 열려 있는 보상 흐름과 제목. 경계 강화가 일반 레벨업보다 먼저 열린다. 열린 화면이 없으면 null.
   function currentReward() {
     if (boundaryUpgrades.active) return { flow: boundaryUpgrades, title: 'BOUNDARY UPGRADE' };
@@ -138,6 +142,7 @@ export function startGame(canvas) {
     removeDeadEnemies(enemies, (enemy) => {
       experience.spawnOrbFor(enemy);
       // 중간 보스가 죽어서 목록에서 제거되는 순간 한 번만 경계 강화 화면을 예약한다(일반 적은 해당 없음).
+      if (isFinalBoss(enemy)) finalBossDefeated = true; // 승리 처리는 프레임 끝에서 한 번만(플레이어 사망이 같은 프레임이면 게임 오버가 우선)
       if (isMiniBoss(enemy) && !enemy.bossRewardGiven) {
         enemy.bossRewardGiven = true;
         boundaryUpgrades.addUpgrades(1);
@@ -234,6 +239,24 @@ export function startGame(canvas) {
     enemies.push(createMiniBoss(nextEnemyId++, p.x, p.y, player));
   }
 
+  // 최종 보스를 만든다(중간 보스가 살아 있든 죽었든 상관없이 3:00에 한 번). 이미 나왔으면 아무것도 하지 않는다.
+  function spawnFinalBoss() {
+    if (finalBossSpawned) return;
+    finalBossSpawned = true;
+    const p = miniBossSpawnPosition(player, size, Math.random, { margin: BOSS.finalBoss.spawnMargin });
+    enemies.push(createFinalBoss(nextEnemyId++, p.x, p.y, player));
+  }
+
+  // 최종 보스 처치로 런을 끝낸다. 아직 열지 않은 보상 예약은 지워서 승리 뒤에 보상 화면이 다시 열리지 않게 한다(이미 적용된 보상은 그대로).
+  function endRunWithVictory() {
+    if (!state.send('victory')) return;
+    levelUp.reset();
+    boundaryUpgrades.reset();
+    rewardFlash = null;
+    dashRequested = false;
+    pressed.clear();
+  }
+
   // 새 런을 시작할 때 입력, 플레이어, 대시, 시간, 이벤트 기록을 모두 초기 상태로 되돌린다.
   function resetRun() {
     pressed.clear();
@@ -262,6 +285,8 @@ export function startGame(canvas) {
     levelUp.reset(); // 대기 중인 보상과 열려 있던 후보를 지움
     boundaryUpgrades = createBoundaryUpgradeFlow({ boundary }); // 새 경계에 연결된 새 흐름(예약된 경계 강화도 지움)
     rewardFlash = null;
+    finalBossDefeated = false;
+    finalBossSpawned = false;
     weapons.reset(); // 투사체/효과를 지우고 무기를 시작 구성(레벨 1, 쿨다운 0)으로 되돌림
     health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
     gameTime = devOptions.startTime;
@@ -353,6 +378,7 @@ export function startGame(canvas) {
     gameTime += dt * devOptions.speed;
     for (const event of timeline.update(gameTime)) {
       notice = { text: EVENT_MESSAGES[event.id], remaining: NOTICE_DURATION };
+      if (event.id === 'finalBoss') spawnFinalBoss();
       if (event.id === 'midBoss') spawnMiniBoss(); // 타임라인은 이벤트를 런마다 한 번만 발동하므로 보스도 한 번만 나온다.
       if (import.meta.env.DEV) console.log(`[timeline] ${event.id} @ ${formatTime(gameTime)}`);
     }
@@ -670,6 +696,9 @@ export function startGame(canvas) {
       const screen = currentReward();
       drawRewardCards(ctx, size, rewardFlash ? { title: rewardFlash.title, cards: rewardFlash.cards, selectedIndex: rewardFlash.index } : { title: screen?.title ?? 'LEVEL UP', cards: screen?.flow.candidates ?? [] });
       return;
+    } else if (state.is(STATES.VICTORY)) {
+      title = '승리';
+      lines = [`생존 시간 ${formatTime(gameTime)}`, 'Enter를 눌러 새 런 시작'];
     } else if (state.is(STATES.GAMEOVER)) {
       title = '게임 오버';
       lines = [`생존 시간 ${formatTime(gameTime)}`, 'Enter를 눌러 다시 시작'];
@@ -911,6 +940,7 @@ export function startGame(canvas) {
       updateEnemySystem(dt); // 적 생성과 이동(플레이어 위치 기준)
       updateEnemyProjectileSystem(dt); // 원거리 적 발사와 투사체 명중(적 이동 후, 접촉 피해 전)
       updateContactDamage(); // 이동이 끝난 위치 기준 접촉 피해. HP 0이면 여기서 게임 오버가 된다.
+      if (finalBossDefeated && state.is(STATES.PLAYING)) endRunWithVictory(); // 사망(게임 오버)이 같은 프레임이면 이미 playing이 아니므로 게임 오버가 우선한다.
       if (state.is(STATES.PLAYING)) updateExperience(); // 마지막에 구슬 줍기. 게임 오버가 난 프레임에는 줍지 않는다.
       openRewardScreenIfNeeded(); // 이번 프레임에 예약된 보상(보스 처치 등) 화면. 같은 프레임의 레벨업과 순서대로 이어진다.
     }
