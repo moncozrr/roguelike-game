@@ -58,6 +58,14 @@ function snapshot(h) {
   });
 }
 
+// 보상을 고르고 선택 강조 시간(약 0.15초)이 지나 다음 화면이나 전투 재개까지 진행한다.
+// 보상 자체는 키를 누른 즉시 적용되지만, 화면 전환은 강조 시간 뒤에 일어난다.
+const FLASH_FRAMES_SECONDS = 0.25;
+function choose(h, code) {
+  h.tap(code);
+  h.run(FLASH_FRAMES_SECONDS);
+}
+
 // 무기/자석 상태(보상 적용 확인용)
 const loadout = (h) => JSON.stringify({ s: h.game.weapons.slots.map((w) => [w.id, w.level]), m: h.game.experience.magnetLevel });
 
@@ -100,7 +108,12 @@ test('1. 레벨업 진입: 플레이어, 적, 투사체, 쿨다운, 게임 타�
     assert.equal(snapshot(h), frozen); // 3초 동안 아무것도 진행되지 않았다
     assert.ok(g.gameTime() === timeBefore || g.gameTime() > 0); // 타이머 값은 스냅샷에 포함되어 위에서 검증됨
 
-    h.tap('Digit1'); // 선택하면 즉시 재개
+    h.tap('Digit1'); // 선택하면 보상이 적용되고, 짧은 강조 동안은 여전히 정지 상태다
+    assert.equal(g.state.current, 'levelup');
+    const duringFlash = snapshot(h);
+    h.run(0.05);
+    assert.equal(snapshot(h), duringFlash); // 강조 중에도 아무것도 진행되지 않는다
+    h.run(0.2); // 강조가 끝나면 재개
     assert.equal(g.state.current, 'playing');
     h.run(0.5);
     assert.notEqual(snapshot(h), frozen);
@@ -142,13 +155,15 @@ for (const [key, index] of [['Digit1', 0], ['Digit2', 1], ['Digit3', 2], ['Numpa
       h.step(); // 선택 화면 그리기
       const shown = g.levelUp.candidates.map((c) => ({ ...c }));
       assert.equal(shown.length, 3);
-      // 화면에는 후보가 번호와 구분과 함께 표시된다
+      // 화면에는 카드마다 번호, 유형, 이름, 효과 수치, 설명이 표시된다(보상 데이터의 값 그대로)
       assert.ok(h.texts.includes('LEVEL UP'));
       shown.forEach((c, i) => {
-        assert.ok(
-          h.texts.some((t) => t.startsWith(`${i + 1}) [${c.category}] ${c.title}`)),
-          `${i + 1}번 후보 문구가 화면에 없습니다: ${h.texts.join(' / ')}`,
-        );
+        // 긴 문장은 카드 너비에 맞춰 여러 줄로 나뉘어 그려지므로 이어 붙인 텍스트에서 찾는다.
+        const drawn = h.texts.join(' ');
+        for (const text of [c.category, c.title, c.effect, c.description]) {
+          assert.ok(drawn.includes(text), `${i + 1}번 카드에 "${text}"가 없습니다: ${drawn}`);
+        }
+        assert.ok(h.texts.includes(String(i + 1)), `${i + 1}번 번호가 없습니다`);
       });
       const before = {
         level: (id) => g.weapons.levelOf(id),
@@ -156,6 +171,7 @@ for (const [key, index] of [['Digit1', 0], ['Digit2', 1], ['Digit3', 2], ['Numpa
         shard: g.weapons.levelOf('shard'),
       };
       h.tap(key);
+      h.run(FLASH_FRAMES_SECONDS);
       assert.equal(g.state.current, 'playing');
       const chosen = shown[index];
       if (chosen.kind === 'newWeapon') {
@@ -194,6 +210,10 @@ test('3. 표시되지 않은 번호, 숫자가 아닌 키, 키 반복(repeat)은
     assert.equal(JSON.stringify(g.levelUp.candidates), shown);
 
     h.tap('Digit1');
+    assert.equal(g.state.current, 'levelup'); // 강조 중
+    h.tap('Digit1'); // 강조 중에 다시 눌러도 무시(한 번만 적용)
+    h.tap('Digit2');
+    h.run(FLASH_FRAMES_SECONDS);
     assert.equal(g.state.current, 'playing');
     const after = loadout(h);
     assert.notEqual(after, before);
@@ -223,7 +243,7 @@ test('3. 후보가 1~2개뿐인 화면에서는 없는 번호가 무시되고, �
           assert.equal(g.state.current, 'levelup');
           assert.equal(JSON.stringify(g.levelUp.candidates), snap);
         }
-        h.tap('Digit1');
+        choose(h, 'Digit1');
       }
       if (g.weapons.slots.length === 3 && g.weapons.slots.every((w) => w.level === 5) && g.experience.magnetLevel === 3) break;
     }
@@ -262,12 +282,12 @@ test('4. 연속 레벨업: 선택마다 정지가 유지되고, 마지막 선택
       assert.equal(g.state.current, 'levelup', `${i + 1}번째 화면`);
       assert.equal(g.levelUp.pending, 4 - i);
       h.step();
-      if (i < 4) assert.ok(h.texts.some((t) => t.includes(`남은 레벨업 ${4 - i}`)), `남은 레벨업 표시: ${h.texts.join(' / ')}`);
+      assert.ok(!h.texts.some((t) => t.includes('남은 레벨업')), '카드 화면에는 제목 외 추가 문구가 없다');
       const frozen = snapshot(h);
       h.run(1);
       assert.equal(snapshot(h), frozen); // 화면이 열려 있는 동안 정지
       seenLoadouts.add(loadout(h));
-      h.tap('Digit1');
+      choose(h, 'Digit1');
     }
     assert.equal(g.state.current, 'playing'); // 모든 선택이 끝난 뒤에만 재개
     assert.equal(g.levelUp.pending, 0);
@@ -339,7 +359,7 @@ test('6. 재시작: 경험치, 레벨, 자석, 무기, 구슬, 투사체, 대기
     const g = h.game;
     // 진행 상태를 쌓는다: 레벨업 보상으로 무기/자석 변경
     h.tap('KeyX', { shiftKey: true });
-    while (g.state.is('levelup')) h.tap('Digit1');
+    while (g.state.is('levelup')) choose(h, 'Digit1');
     g.weapons.equip('boomerangBlade'); // 부메랑까지 날려 둔다
     g.weapons.equip('chainLightning');
     g.enemies.push(livingEnemy(800, g.player.x + 120, g.player.y));
@@ -407,7 +427,7 @@ test('7. 개발용 XP 키: X는 +10, Shift+X는 +100 XP를 주고, 실행 중일
     h.tap('KeyX'); // 선택 중에는 동작하지 않는다
     h.tap('KeyX', { shiftKey: true });
     assert.deepEqual([g.experience.level, g.experience.xp], [2, 2]);
-    h.tap('Digit1');
+    choose(h, 'Digit1');
     h.press('KeyX', { repeat: true }); // 키 반복은 무시
     assert.deepEqual([g.experience.level, g.experience.xp], [2, 2]);
     h.tap('Escape'); // 정지 중에는 동작하지 않는다

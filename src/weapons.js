@@ -136,6 +136,9 @@ export function createWeaponSystem({
     get catalog() {
       return defs;
     },
+    get rules() {
+      return rules;
+    },
     // 새 무기를 지금 얻을 수 있는지(모르는 무기/이미 보유/슬롯 가득이면 false)
     canEquip: (id) => Object.hasOwn(defs, id) && !find(id) && slots.length < rules.maxSlots,
     // 보유 무기를 지금 강화할 수 있는지(없거나 최대 레벨이면 false)

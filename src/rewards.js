@@ -3,6 +3,7 @@
 // "무슨 후보가 있고 무엇을 골랐는가"만 다룬다. 난수는 주입할 수 있어서 테스트를 재현할 수 있다.
 
 import { MAGNET } from './config.js';
+import { weaponDamage } from './weapons.js';
 
 export const REWARD_KINDS = {
   NEW_WEAPON: 'newWeapon',
@@ -17,6 +18,11 @@ const CATEGORY_LABELS = {
   [REWARD_KINDS.MAGNET]: '자석 강화',
 };
 
+// 표시용 숫자: 부동소수점 잔여값(3.5999999)을 없애고 소수 둘째 자리까지만 보여 준다.
+const fmt = (n) => String(Number(n.toFixed(2)));
+
+// 후보 하나에 화면에 보여 줄 값이 들어 있다: title(이름), category(유형), effect(효과 수치/결과), description(짧은 설명).
+// 카드 UI는 이 값을 그대로 보여 주며 따로 계산하지 않는다.
 // 지금 상태에서 선택 가능한 모든 보상(순서는 무기 정의 순서). 불가능한 보상은 만들지 않는다.
 //   - 신규 무기: 아직 없고 슬롯이 남았을 때
 //   - 무기 강화: 보유 무기 중 최대 레벨 미만
@@ -25,14 +31,21 @@ export function listValidRewards({ weapons, experience, magnet = MAGNET }) {
   const rewards = [];
   for (const [id, def] of Object.entries(weapons.catalog)) {
     if (weapons.canEquip(id)) {
-      rewards.push({ kind: REWARD_KINDS.NEW_WEAPON, id, title: def.name, description: def.description });
+      rewards.push({
+        kind: REWARD_KINDS.NEW_WEAPON,
+        id,
+        title: def.name,
+        effect: `Lv.1 · 피해 ${fmt(weaponDamage(def, 1, weapons.rules))}`,
+        description: def.description,
+      });
     } else if (weapons.canUpgrade(id)) {
       const from = weapons.levelOf(id);
       rewards.push({
         kind: REWARD_KINDS.WEAPON_UPGRADE,
         id,
         title: def.name,
-        description: `Lv.${from} → Lv.${from + 1} (피해 증가)`,
+        effect: `Lv.${from} → Lv.${from + 1} · 피해 ${fmt(weaponDamage(def, from, weapons.rules))} → ${fmt(weaponDamage(def, from + 1, weapons.rules))}`,
+        description: `기본 피해의 ${weapons.rules.damagePercentPerLevel}%p가 추가됩니다.`,
         fromLevel: from,
         toLevel: from + 1,
       });
@@ -44,7 +57,8 @@ export function listValidRewards({ weapons, experience, magnet = MAGNET }) {
       kind: REWARD_KINDS.MAGNET,
       id: 'magnet',
       title: '경험치 자석',
-      description: `줍기 반경 ${experience.pickupRadius}px → ${experience.pickupRadius + magnet.radiusPerLevel}px`,
+      effect: `줍기 반경 ${experience.pickupRadius}px → ${experience.pickupRadius + magnet.radiusPerLevel}px`,
+      description: '경험치 구슬을 더 멀리서 줍습니다.',
       fromLevel: from,
       toLevel: from + 1,
     });

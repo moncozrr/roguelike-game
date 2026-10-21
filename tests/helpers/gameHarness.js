@@ -82,13 +82,18 @@ function installGlobals() {
   setGlobal('document', doc);
 }
 
-// 모든 그리기 함수를 아무것도 안 하는 함수로 대신하고, 글자와 속성 설정만 기록하는 가짜 2D 컨텍스트
+// 모든 그리기 함수를 아무것도 안 하는 함수로 대신하고, 글자와 사각형(fillRect/strokeRect)과 속성 설정만 기록하는 가짜 2D 컨텍스트
 function createFakeContext() {
   const texts = [];
+  const rects = []; // { op, x, y, width, height, fillStyle, strokeStyle }
   const props = {};
   const noop = () => {};
   const target = {
     texts,
+    rects,
+    measureText: (text) => ({ width: String(text).length * 8 }), // 글자 너비를 글자 수로 흉내 낸다(줄바꿈 계산용)
+    fillRect: (x, y, width, height) => rects.push({ op: 'fill', x, y, width, height, fillStyle: props.fillStyle }),
+    strokeRect: (x, y, width, height) => rects.push({ op: 'stroke', x, y, width, height, strokeStyle: props.strokeStyle }),
     createRadialGradient: () => ({ addColorStop: noop }),
     createLinearGradient: () => ({ addColorStop: noop }),
     fillText: (text) => texts.push(String(text)),
@@ -108,14 +113,16 @@ function createFakeContext() {
 
 // 게임을 하나 실행한다. 테스트가 끝나면 반드시 dispose()를 불러 전역 값을 되돌린다.
 //   press/release/tap: 키 입력, step/run/runUntil: 프레임 진행(1/60초 단위), game: 개발 모드 상태 핸들
-export function launchGame(startGame, { seed = 1, width = 800, height = 600 } = {}) {
+export function launchGame(startGame, { seed = 1, width = 800, height = 600, left = 0, top = 0 } = {}) {
   installGlobals();
   const ctx = createFakeContext();
+  const canvasEvents = createEventTarget();
   const canvas = {
     width,
     height,
-    getBoundingClientRect: () => ({ width, height }),
+    getBoundingClientRect: () => ({ left, top, width, height }),
     getContext: () => ctx,
+    addEventListener: canvasEvents.addEventListener,
   };
   let fakeNow = 1000;
   let pendingFrame = null;
@@ -148,6 +155,9 @@ export function launchGame(startGame, { seed = 1, width = 800, height = 600 } = 
     get texts() {
       return ctx.texts;
     },
+    get rects() {
+      return ctx.rects;
+    },
     // 키보드 입력. 게임이 window에 등록한 리스너를 그대로 호출한다.
     press(code, { repeat = false, shiftKey = false } = {}) {
       window.dispatch('keydown', { code, repeat, shiftKey, preventDefault() {} });
@@ -159,12 +169,17 @@ export function launchGame(startGame, { seed = 1, width = 800, height = 600 } = 
       harness.press(code, options);
       harness.release(code);
     },
-    // 프레임 하나를 진행한다. 글자 기록은 이번 프레임 것만 남긴다.
+    // 마우스 클릭(캔버스 안 좌표 x, y). 페이지 좌표(clientX/Y)로 바꿔서 게임의 클릭 리스너를 그대로 호출한다.
+    click(x, y) {
+      canvasEvents.dispatch('click', { clientX: left + x, clientY: top + y });
+    },
+    // 프레임 하나를 진행한다. 글자/사각형 기록은 이번 프레임 것만 남긴다.
     step(seconds = 1 / 60) {
       fakeNow += seconds * 1000;
       const callback = pendingFrame;
       pendingFrame = null;
       ctx.texts.length = 0;
+      ctx.rects.length = 0;
       callback(fakeNow);
     },
     run(seconds) {

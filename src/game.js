@@ -12,6 +12,8 @@ import { createWeaponSystem } from './weapons.js';
 import { createEnemyProjectileSystem } from './enemyProjectiles.js';
 import { createExperience } from './experience.js';
 import { createLevelUpFlow } from './rewards.js';
+import { computeCardLayout, hitTestCards, keyToCardIndex, pointerToCanvas } from './rewardCards.js';
+import { drawRewardCards } from './rewardCardsView.js';
 import { createPlayerHealth, anyContact } from './combat.js';
 import { createSpawner } from './spawner.js';
 import { createEnemySprites } from './enemySprites.js';
@@ -24,6 +26,7 @@ const DASH_SPEED = DASH.speed;
 const DASH_COOLDOWN = DASH.cooldown;
 const ENEMY_RADIUS = enemyRadius(ENEMY); // 접촉 판정에 쓰는 적 충돌 반지름(표시 크기와 별개)
 const HIT_BLINK_INTERVAL = 0.1; // [임시] 피격 후 보호 중 깜빡임: 이 시간(초)마다 보임/흐림이 바뀐다(표시용 값, 밸런스 아님)
+const REWARD_FLASH_DURATION = 0.15; // [임시] 보상을 고른 뒤 선택한 카드를 강조해서 보여 주는 시간(초, 표시용). 이 동안에도 게임은 정지 상태다.
 const HIT_BLINK_ALPHA = 0.35; // [임시] 흐려진 상태의 투명도
 const DEBUG_DASH = false; // true면 개발용으로 대시 이동 거리를 콘솔에 출력
 
@@ -133,11 +136,35 @@ export function startGame(canvas) {
     openLevelUpIfNeeded(experience.collect(player).levelsGained);
   }
 
-  // 보상 선택(1~3번 키). 표시된 후보에 해당하는 번호만 유효하다. 더 열 화면이 없으면 전투로 돌아간다.
+  // 보상 선택 직후의 강조 표시: { cards: 방금 보여 준 카드, index: 고른 카드, remaining: 남은 시간(초) }.
+  // 강조 중에는 보상이 이미 적용되었지만 화면은 그대로 정지 상태이며, 끝난 뒤에 다음 화면을 열거나 전투를 재개한다.
+  // (이 값은 "강조를 보여 주는 동안 입력을 받지 않는" 용도이고, 보상을 한 번만 적용하는 규칙은 levelUp.select가 맡는다.)
+  let rewardFlash = null;
+
+  // 보상 선택(숫자 키와 마우스 클릭이 같은 함수를 쓴다). index는 현재 화면에서 왼쪽부터 센 카드 번호(0부터).
+  // 표시되지 않은 번호나 이미 처리된 선택은 무시한다. 선택하면 보상은 즉시 적용되고 짧은 강조 뒤에 화면이 넘어간다.
   function selectReward(index) {
-    if (!state.is(STATES.LEVELUP)) return;
+    if (!state.is(STATES.LEVELUP) || rewardFlash) return;
+    const cards = levelUp.candidates;
     if (!levelUp.select(index)) return;
+    rewardFlash = { cards, index, remaining: REWARD_FLASH_DURATION };
+  }
+
+  // 강조 시간이 지나면 더 열 화면이 없을 때만 전투로 돌아간다(레벨업 상태 전환은 기존 상태 기계를 쓴다).
+  function updateRewardFlash(dt) {
+    if (!rewardFlash) return;
+    rewardFlash.remaining -= dt;
+    if (rewardFlash.remaining > 0) return;
+    rewardFlash = null;
     if (!levelUp.active) state.send('rewardDone');
+  }
+
+  // 카드 영역 클릭. 그려진 카드와 같은 배치 계산(computeCardLayout)으로 판정하므로 어긋나지 않는다.
+  function onCanvasClick(e) {
+    if (!state.is(STATES.LEVELUP) || rewardFlash) return;
+    const point = pointerToCanvas(e, canvas.getBoundingClientRect(), size);
+    const index = hitTestCards(computeCardLayout(levelUp.candidates.length, size), point.x, point.y);
+    if (index >= 0) selectReward(index);
   }
 
   // 원거리 적의 투사체. 게임이 실행 중일 때만 갱신되므로 정지/게임 오버에서는 쿨다운과 투사체가 멈춘다.
@@ -196,6 +223,7 @@ export function startGame(canvas) {
     enemyProjectiles.reset(); // 적 투사체를 모두 지움(원거리 적 쿨다운은 적 목록과 함께 지워짐)
     experience.reset(); // 구슬, 경험치, 레벨, 자석을 초기화
     levelUp.reset(); // 대기 중인 보상과 열려 있던 후보를 지움
+    rewardFlash = null;
     weapons.reset(); // 투사체/효과를 지우고 무기를 시작 구성(레벨 1, 쿨다운 0)으로 되돌림
     health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
     gameTime = devOptions.startTime;
@@ -583,9 +611,9 @@ export function startGame(canvas) {
       title = '일시 정지';
       lines = ['Esc / Enter 눌러서 재개'];
     } else if (state.is(STATES.LEVELUP)) {
-      title = 'LEVEL UP';
-      lines = levelUp.candidates.map((c, i) => `${i + 1}) [${c.category}] ${c.title} - ${c.description}`);
-      lines.push(`숫자 키로 선택${levelUp.pending > 0 ? ` (남은 레벨업 ${levelUp.pending})` : ''}`);
+      // 보상 선택 화면은 카드 UI가 그린다. 강조 중에는 방금 보여 준 카드에서 고른 카드를 강조한다.
+      drawRewardCards(ctx, size, rewardFlash ? { title: 'LEVEL UP', cards: rewardFlash.cards, selectedIndex: rewardFlash.index } : { title: 'LEVEL UP', cards: levelUp.candidates });
+      return;
     } else if (state.is(STATES.GAMEOVER)) {
       title = '게임 오버';
       lines = [`생존 시간 ${formatTime(gameTime)}`, 'Enter를 눌러 다시 시작'];
@@ -798,6 +826,7 @@ export function startGame(canvas) {
     // lastTime은 정지 중에도 매 프레임 갱신하므로, 재개 직후 첫 dt가 정지 시간만큼 커지지 않는다.
     const dt = Math.min((now - lastTime) / 1000, MAX_FRAME_TIME);
     lastTime = now;
+    updateRewardFlash(dt); // 보상 선택 강조 시간(정지 중에도 흐른다)
     if (state.is(STATES.PLAYING)) {
       update(dt); // 게임 진행 관련 업데이트는 실행 중에만
       refreshBoundaryState(); // 이동/대시가 끝난 위치 기준으로 경계 안/밖 갱신
@@ -844,9 +873,9 @@ export function startGame(canvas) {
       return;
     }
     if (state.is(STATES.LEVELUP)) {
-      // 보상 선택 중에는 1/2/3만 받는다(숫자 키패드 포함). 다른 입력은 무시한다.
-      const choice = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
-      if (choice !== undefined) {
+      // 보상 선택 중에는 1/2/3만 받는다(숫자 키패드 포함, 화면의 왼쪽부터 카드 번호). 다른 입력은 무시한다.
+      const choice = keyToCardIndex(e.code);
+      if (choice !== null) {
         e.preventDefault();
         if (!e.repeat) selectReward(choice);
       }
@@ -880,6 +909,7 @@ export function startGame(canvas) {
     if (e.code === 'Space') spaceHeld = false;
     pressed.delete(e.code);
   });
+  canvas.addEventListener('click', onCanvasClick);
   window.addEventListener('blur', pauseForFocusLoss);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) pauseForFocusLoss();
