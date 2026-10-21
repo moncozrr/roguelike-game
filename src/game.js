@@ -2,11 +2,15 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
-import { GAME_TITLE, PLAYER, DASH, WORLD, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
+import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
 import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
 import { createBoundary } from './boundary.js';
+import { createEnemy, updateEnemies, enemyRadius } from './enemy.js';
+import { createPlayerHealth, anyContact } from './combat.js';
+import { createSpawner } from './spawner.js';
+import { createEnemySprites } from './enemySprites.js';
 
 // 밸런스 값은 config.js에서 관리한다. 아래는 이 파일에서 쓰기 쉬운 이름으로 옮겨 둔 것이다.
 const PLAYER_RADIUS = PLAYER.radius;
@@ -14,6 +18,9 @@ const PLAYER_SPEED = PLAYER.speed;
 const DASH_DISTANCE = DASH.distance;
 const DASH_SPEED = DASH.speed;
 const DASH_COOLDOWN = DASH.cooldown;
+const ENEMY_RADIUS = enemyRadius(ENEMY); // 접촉 판정에 쓰는 적 충돌 반지름(표시 크기와 별개)
+const HIT_BLINK_INTERVAL = 0.1; // [임시] 피격 후 보호 중 깜빡임: 이 시간(초)마다 보임/흐림이 바뀐다(표시용 값, 밸런스 아님)
+const HIT_BLINK_ALPHA = 0.35; // [임시] 흐려진 상태의 투명도
 const DEBUG_DASH = false; // true면 개발용으로 대시 이동 거리를 콘솔에 출력
 
 // 시간 이벤트가 발동했을 때 화면에 보여 줄 알림(단계 1에서는 보스 전투 없이 알림만 표시)
@@ -87,6 +94,31 @@ export function startGame(canvas) {
     insideBoundary = boundary.contains(player);
   }
 
+  // 적(원혼): 적 목록, 번호표, 생성기, 스프라이트. 적 로직은 이미지 로딩 여부와 무관하게 동작한다.
+  const enemies = [];
+  let nextEnemyId = 1;
+  const spawner = createSpawner();
+  const enemySprites = createEnemySprites();
+  let pixelRatio = 1; // 화면 배율(devicePixelRatio). 도트 그림을 정수 픽셀에 맞춰 그릴 때 쓴다.
+
+  // 플레이어 체력: HP, 피격 후 보호, 대시 무적(서로 독립). 판정 규칙은 combat.js에 있다.
+  const health = createPlayerHealth();
+
+  // 적과 닿았으면 피해를 한 번 시도한다(여러 마리가 닿아도 한 번). HP가 0이 되면 게임 오버.
+  // 게임이 실행 중일 때만 불리고, 대시 중에도 불린다(update()의 대시 조기 반환과 무관한 위치에서 호출).
+  function updateContactDamage() {
+    if (!anyContact(player, PLAYER_RADIUS, enemies, ENEMY_RADIUS)) return;
+    if (health.takeContactDamage() && health.isDead) state.send('gameOver');
+  }
+
+  // 생성기가 정한 위치에 적을 만들고, 모든 적을 이동시킨다. 게임이 실행 중일 때만 불린다(정지 중에는 멈춤).
+  function updateEnemySystem(dt) {
+    const cam = computeCamera(player, size, WORLD);
+    const spawned = spawner.update(dt, { gameTime, enemyCount: enemies.length, cam, view: size });
+    for (const p of spawned) enemies.push(createEnemy(nextEnemyId++, p.x, p.y, player));
+    updateEnemies(enemies, dt, player);
+  }
+
   // 새 런을 시작할 때 입력, 플레이어, 대시, 시간, 이벤트 기록을 모두 초기 상태로 되돌린다.
   function resetRun() {
     pressed.clear();
@@ -107,6 +139,10 @@ export function startGame(canvas) {
     clampPlayer();
     boundary = createBoundary(player); // 새 런의 시작 위치에 경계를 고정(강화 레벨도 0으로 초기화)
     refreshBoundaryState();
+    enemies.length = 0; // 이전 런의 적과 생성기 상태(타이머, 소수 이월값)를 모두 지운다.
+    nextEnemyId = 1;
+    spawner.reset();
+    health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
     gameTime = devOptions.startTime;
     timeline.reset();
     notice = null;
@@ -129,6 +165,7 @@ export function startGame(canvas) {
     const width = Math.max(rect.width, PLAYER_RADIUS * 2);
     const height = Math.max(rect.height, PLAYER_RADIUS * 2);
     const dpr = window.devicePixelRatio || 1;
+    pixelRatio = dpr;
 
     size.width = width;
     size.height = height;
@@ -168,6 +205,7 @@ export function startGame(canvas) {
     dash.startX = player.x;
     dash.startY = player.y;
     dash.elapsed = 0;
+    health.startDashInvulnerability(); // 대시 무적 시작(피격 후 보호 시간은 건드리지 않는다)
     if (dir.x !== 0) facingRight = dir.x > 0;
   }
 
@@ -211,6 +249,9 @@ export function startGame(canvas) {
       dashRequested = false;
       if (!dash.active && dash.cooldown === 0) startDash();
     }
+
+    // 보호 타이머는 대시 조기 반환보다 앞에서 줄인다(대시 중에도 흘러야 한다). 대시를 막 시작한 프레임의 시간도 포함한다.
+    health.update(dt);
 
     if (dash.active) {
       updateDash(dt);
@@ -406,6 +447,8 @@ export function startGame(canvas) {
     ctx.fillText(`camera (${cam.x.toFixed(1)}, ${cam.y.toFixed(1)})`, 12, 28);
     const dist = boundary.distanceTo(player).toFixed(1);
     ctx.fillText(`boundary: ${insideBoundary ? 'inside' : 'outside'} (d=${dist} / r=${boundary.radius})`, 12, 44);
+    ctx.fillText(`enemies: ${enemies.length} / ${SPAWN.maxEnemies}`, 12, 60);
+    ctx.fillText(`hp: ${health.hp} / ${health.maxHp}  protect: ${health.hitProtection.toFixed(2)}  dashInv: ${health.dashInvuln.toFixed(2)}`, 12, 76);
     ctx.restore();
   }
 
@@ -424,7 +467,42 @@ export function startGame(canvas) {
       ctx.fillText(notice.text, size.width / 2, 44);
     }
     ctx.restore();
+    drawHealthBar();
     if (import.meta.env.DEV) drawDevCoords(cam);
+  }
+
+  // 화면 왼쪽 아래의 HP 바. 개발용 글자(왼쪽 위)와 겹치지 않는다.
+  function drawHealthBar() {
+    const barW = 200;
+    const barH = 14;
+    const x = 16;
+    const y = size.height - 16 - barH;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(x - 2, y - 2, barW + 4, barH + 4);
+    ctx.fillStyle = '#b8404f';
+    ctx.fillRect(x, y, (barW * health.hp) / health.maxHp, barH);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#e8e6e3';
+    ctx.font = '600 13px system-ui, "Malgun Gothic", sans-serif';
+    ctx.fillText(`HP ${health.hp} / ${health.maxHp}`, x, y - 4);
+    ctx.restore();
+  }
+
+  // 피격 후 보호 중에는 플레이어가 깜빡인다(대시 무적에서는 깜빡이지 않는다).
+  function drawPlayerWithHitBlink() {
+    const dim = health.isProtected && Math.floor(health.hitProtection / HIT_BLINK_INTERVAL) % 2 === 1;
+    if (!dim) {
+      drawPlayer();
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha = HIT_BLINK_ALPHA;
+    drawPlayer();
+    ctx.restore();
   }
 
   // ready / paused / gameover일 때 화면을 어둡게 하고 안내 문구를 보여 준다.
@@ -458,6 +536,17 @@ export function startGame(canvas) {
     ctx.restore();
   }
 
+  // 적과 플레이어를 y 좌표 순서로 그린다: 플레이어보다 위쪽(y가 작은) 적은 플레이어 뒤에,
+  // 아래쪽(y가 같거나 큰) 적은 플레이어 앞에 그려서 겹칠 때 앞뒤가 자연스럽게 보이게 한다.
+  function drawEntities(cam) {
+    const snap = { camX: cam.x, camY: cam.y, dpr: pixelRatio }; // 도트 그림을 정수 픽셀에 맞춰 그리기 위한 값
+    const order = enemies.slice().sort((a, b) => a.y - b.y); // 그리기 순서만 정렬하고 원래 목록은 건드리지 않는다.
+    let i = 0;
+    for (; i < order.length && order[i].y < player.y; i++) enemySprites.draw(ctx, order[i].x, order[i].y, order[i].facing, snap);
+    drawPlayerWithHitBlink();
+    for (; i < order.length; i++) enemySprites.draw(ctx, order[i].x, order[i].y, order[i].facing, snap);
+  }
+
   function draw() {
     // 카메라는 매 프레임 플레이어(월드 좌표)와 화면 크기에서 계산한다. 창 크기가 바뀌어도 일관된다.
     const cam = computeCamera(player, size, WORLD);
@@ -475,7 +564,7 @@ export function startGame(canvas) {
       drawDebugGridCrosses(viewRect(cam, size));
       drawWorldMarkers();
     }
-    drawPlayer();
+    drawEntities(cam); // 적(경계 위)과 플레이어
     ctx.restore();
 
     // 화면 레이어: HUD와 오버레이는 화면에 고정된다.
@@ -490,6 +579,8 @@ export function startGame(canvas) {
     if (state.is(STATES.PLAYING)) {
       update(dt); // 게임 진행 관련 업데이트는 실행 중에만
       refreshBoundaryState(); // 이동/대시가 끝난 위치 기준으로 경계 안/밖 갱신
+      updateEnemySystem(dt); // 적 생성과 이동(플레이어 위치 기준)
+      updateContactDamage(); // 이동이 끝난 위치 기준 접촉 피해. HP 0이면 여기서 게임 오버가 된다.
     }
     draw();
     requestAnimationFrame(frame);
@@ -556,6 +647,7 @@ export function startGame(canvas) {
     sprite = loaded;
     clampPlayer(); // 여백이 넓어졌으므로 이미 가장자리에 있던 플레이어를 안쪽으로 맞춘다.
   });
+  enemySprites.load(); // 실패해도 예외 없이 임시 원형으로 대체되므로 결과를 기다리지 않는다.
 
   new ResizeObserver(resize).observe(canvas);
   resize();
