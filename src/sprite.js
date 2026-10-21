@@ -4,7 +4,7 @@
 const IMAGE_URL = `${import.meta.env.BASE_URL}assets/characters/protagonist-temp.png`;
 const FRAMES_URL = `${import.meta.env.BASE_URL}assets/characters/protagonist-frames.json`;
 
-export const SPRITE_HEIGHT = 96; // 화면에 표시할 캐릭터 높이(px)
+export const SPRITE_HEIGHT = 48; // 화면에 표시할 캐릭터 높이(px). 너비는 같은 배율로 따라간다(이전 96px의 50%). 충돌 반지름(PLAYER.radius)과는 별개다.
 export const WALK_FPS = 10; // 걷기 애니메이션 초당 프레임 수
 
 const WALK_FRAME_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8];

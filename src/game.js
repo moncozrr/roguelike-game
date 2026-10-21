@@ -2,7 +2,7 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
-import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
+import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
 import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
@@ -10,6 +10,8 @@ import { createBoundary } from './boundary.js';
 import { createEnemy, updateEnemies, enemyRadius, removeDeadEnemies } from './enemy.js';
 import { createWeaponSystem } from './weapons.js';
 import { createEnemyProjectileSystem } from './enemyProjectiles.js';
+import { createExperience } from './experience.js';
+import { createLevelUpFlow } from './rewards.js';
 import { createPlayerHealth, anyContact } from './combat.js';
 import { createSpawner } from './spawner.js';
 import { createEnemySprites } from './enemySprites.js';
@@ -109,10 +111,33 @@ export function startGame(canvas) {
   // 무기: 자동 공격(가장 가까운 살아 있는 적), 투사체, 근접 공격. 게임이 실행 중일 때만 갱신되므로 정지/게임 오버에서는 멈춘다.
   const weapons = createWeaponSystem();
 
+  // 경험치 구슬/레벨/자석과 레벨업 보상 선택. 선택 화면(levelup 상태)이 열려 있는 동안은 게임이 갱신되지 않는다.
+  const experience = createExperience();
+  const levelUp = createLevelUpFlow({ weapons, experience });
+
   // 무기를 갱신하고, 이번 공격으로 죽은 적을 목록에서 제거한다(제거된 적은 이후 이동/밀어내기/접촉/생성 수 계산에서 빠진다).
+  // 제거되는 적마다 경험치 구슬을 한 개 만든다(한 적에게서는 한 번만).
   function updateWeaponSystem(dt) {
     weapons.update(dt, player, enemies);
-    removeDeadEnemies(enemies);
+    removeDeadEnemies(enemies, (enemy) => experience.spawnOrbFor(enemy));
+  }
+
+  // 구슬을 줍고, 레벨이 올랐으면 보상 선택 화면을 연다. 게임이 실행 중일 때만 불린다.
+  function openLevelUpIfNeeded(levelsGained) {
+    if (levelsGained <= 0) return;
+    levelUp.addLevelUps(levelsGained);
+    if (levelUp.advance() && state.send('levelUp')) dashRequested = false; // 선택 중에는 대시 요청을 쌓지 않는다.
+  }
+
+  function updateExperience() {
+    openLevelUpIfNeeded(experience.collect(player).levelsGained);
+  }
+
+  // 보상 선택(1~3번 키). 표시된 후보에 해당하는 번호만 유효하다. 더 열 화면이 없으면 전투로 돌아간다.
+  function selectReward(index) {
+    if (!state.is(STATES.LEVELUP)) return;
+    if (!levelUp.select(index)) return;
+    if (!levelUp.active) state.send('rewardDone');
   }
 
   // 원거리 적의 투사체. 게임이 실행 중일 때만 갱신되므로 정지/게임 오버에서는 쿨다운과 투사체가 멈춘다.
@@ -169,6 +194,8 @@ export function startGame(canvas) {
     nextEnemyId = 1;
     spawner.reset();
     enemyProjectiles.reset(); // 적 투사체를 모두 지움(원거리 적 쿨다운은 적 목록과 함께 지워짐)
+    experience.reset(); // 구슬, 경험치, 레벨, 자석을 초기화
+    levelUp.reset(); // 대기 중인 보상과 열려 있던 후보를 지움
     weapons.reset(); // 투사체/효과를 지우고 무기를 시작 구성(레벨 1, 쿨다운 0)으로 되돌림
     health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
     gameTime = devOptions.startTime;
@@ -477,6 +504,7 @@ export function startGame(canvas) {
     ctx.fillText(`boundary: ${insideBoundary ? 'inside' : 'outside'} (d=${dist} / r=${boundary.radius})`, 12, 44);
     ctx.fillText(`enemies: ${enemies.length} / ${SPAWN.maxEnemies}`, 12, 60);
     ctx.fillText(`weapons: ${weapons.slots.map((w) => `${w.id} Lv${w.level} cd ${w.cooldown.toFixed(2)}`).join(' | ')}  projectiles: ${weapons.projectiles.length}`, 12, 92);
+    ctx.fillText(`magnet: Lv${experience.magnetLevel} r=${experience.pickupRadius}  orbs: ${experience.orbs.length}  boomerangs: ${weapons.boomerangs.length}  [X] +10xp  [Shift+X] +100xp`, 12, 124);
     ctx.fillText(`enemy projectiles: ${enemyProjectiles.projectiles.length}`, 12, 108);
     ctx.fillText(`hp: ${health.hp} / ${health.maxHp}  protect: ${health.hitProtection.toFixed(2)}  dashInv: ${health.dashInvuln.toFixed(2)}`, 12, 76);
     ctx.restore();
@@ -506,7 +534,7 @@ export function startGame(canvas) {
     const barW = 200;
     const barH = 14;
     const x = 16;
-    const y = size.height - 16 - barH;
+    const y = size.height - 28 - barH; // 아래에 경험치 바가 들어갈 자리를 둔다
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.fillRect(x - 2, y - 2, barW + 4, barH + 4);
@@ -519,6 +547,15 @@ export function startGame(canvas) {
     ctx.fillStyle = '#e8e6e3';
     ctx.font = '600 13px system-ui, "Malgun Gothic", sans-serif';
     ctx.fillText(`HP ${health.hp} / ${health.maxHp}`, x, y - 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(`LV ${experience.level}   XP ${experience.xp} / ${experience.xpToNext}`, x + barW, y - 4);
+    ctx.restore();
+    // 경험치 바(HP 바 바로 아래)
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(x - 2, y + barH + 2, barW + 4, 8);
+    ctx.fillStyle = '#5fcf76';
+    ctx.fillRect(x, y + barH + 4, (barW * experience.xp) / experience.xpToNext, 4);
     ctx.restore();
   }
 
@@ -545,6 +582,10 @@ export function startGame(canvas) {
     } else if (state.is(STATES.PAUSED)) {
       title = '일시 정지';
       lines = ['Esc / Enter 눌러서 재개'];
+    } else if (state.is(STATES.LEVELUP)) {
+      title = 'LEVEL UP';
+      lines = levelUp.candidates.map((c, i) => `${i + 1}) [${c.category}] ${c.title} - ${c.description}`);
+      lines.push(`숫자 키로 선택${levelUp.pending > 0 ? ` (남은 레벨업 ${levelUp.pending})` : ''}`);
     } else if (state.is(STATES.GAMEOVER)) {
       title = '게임 오버';
       lines = [`생존 시간 ${formatTime(gameTime)}`, 'Enter를 눌러 다시 시작'];
@@ -566,12 +607,42 @@ export function startGame(canvas) {
     ctx.restore();
   }
 
+  // 연쇄 번개 표시(임시): 점들을 잇는 지그재그 선. 효과 시간이 끝나면 목록에서 사라져 화면에 남지 않는다.
+  function drawChainLightning(points, alpha) {
+    ctx.save();
+    ctx.globalAlpha = 0.9 * alpha;
+    ctx.strokeStyle = '#9fd8ff';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const nx = -(b.y - a.y) / len; // 선에 수직인 방향
+      const ny = (b.x - a.x) / len;
+      const parts = 4;
+      for (let k = 1; k < parts; k++) {
+        const off = (k % 2 === 0 ? -1 : 1) * 5;
+        ctx.lineTo(a.x + ((b.x - a.x) * k) / parts + nx * off, a.y + ((b.y - a.y) * k) / parts + ny * off);
+      }
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // 근접 공격 표시: 플레이어를 중심으로 공격 범위까지 퍼지는 고리(임시 스타일). 플레이어/적 아래에 그린다.
   function drawWeaponEffects() {
     ctx.save();
     ctx.lineWidth = 3;
     for (const f of weapons.effects) {
       const t = Math.min(f.age / f.duration, 1);
+      if (f.points) {
+        drawChainLightning(f.points, 1 - t);
+        continue;
+      }
       ctx.globalAlpha = 0.8 * (1 - t);
       ctx.strokeStyle = '#e8c36a';
       ctx.fillStyle = 'rgba(232, 195, 106, 0.15)';
@@ -612,6 +683,51 @@ export function startGame(canvas) {
     for (const p of enemyProjectiles.projectiles) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, ENEMY_PROJECTILE.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 부메랑 표시(임시): 회전하는 마름모. 나가는 단계는 금색, 돌아오는 단계는 청록색으로 구분한다.
+  function drawBoomerangs() {
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    for (const b of weapons.boomerangs) {
+      const r = b.def.projectileRadius * 1.3;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.angle);
+      ctx.fillStyle = b.phase === 'out' ? '#f0c85a' : '#6fe0d4';
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(r * 0.5, 0);
+      ctx.lineTo(0, r);
+      ctx.lineTo(-r * 0.5, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // 경험치 구슬(임시 스타일: 연두색 마름모). 화면에 보이는 구슬만 그린다. 적과 플레이어 아래에 그린다.
+  function drawOrbs(view) {
+    const r = XP.orbDrawRadius;
+    ctx.save();
+    ctx.fillStyle = '#7be08a';
+    ctx.strokeStyle = '#2f8f45';
+    ctx.lineWidth = 1.5;
+    for (const orb of experience.orbs) {
+      if (orb.x < view.left - r || orb.x > view.right + r || orb.y < view.top - r || orb.y > view.bottom + r) continue;
+      ctx.beginPath();
+      ctx.moveTo(orb.x, orb.y - r);
+      ctx.lineTo(orb.x + r * 0.75, orb.y);
+      ctx.lineTo(orb.x, orb.y + r);
+      ctx.lineTo(orb.x - r * 0.75, orb.y);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
     }
@@ -665,9 +781,11 @@ export function startGame(canvas) {
       drawDebugGridCrosses(viewRect(cam, size));
       drawWorldMarkers();
     }
+    drawOrbs(viewRect(cam, size));
     drawWeaponEffects();
     drawEntities(cam); // 적(경계 위)과 플레이어
     drawProjectiles();
+    drawBoomerangs();
     drawEnemyProjectiles();
     ctx.restore();
 
@@ -687,6 +805,7 @@ export function startGame(canvas) {
       updateEnemySystem(dt); // 적 생성과 이동(플레이어 위치 기준)
       updateEnemyProjectileSystem(dt); // 원거리 적 발사와 투사체 명중(적 이동 후, 접촉 피해 전)
       updateContactDamage(); // 이동이 끝난 위치 기준 접촉 피해. HP 0이면 여기서 게임 오버가 된다.
+      if (state.is(STATES.PLAYING)) updateExperience(); // 마지막에 구슬 줍기. 게임 오버가 난 프레임에는 줍지 않는다.
     }
     draw();
     requestAnimationFrame(frame);
@@ -724,6 +843,23 @@ export function startGame(canvas) {
       else if (state.send('start')) resetRun();
       return;
     }
+    if (state.is(STATES.LEVELUP)) {
+      // 보상 선택 중에는 1/2/3만 받는다(숫자 키패드 포함). 다른 입력은 무시한다.
+      const choice = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
+      if (choice !== undefined) {
+        e.preventDefault();
+        if (!e.repeat) selectReward(choice);
+      }
+      if (e.code in KEY_DIRECTIONS || e.code === 'Space') e.preventDefault(); // 선택 중에도 페이지가 스크롤되지 않게
+      if (e.code in KEY_DIRECTIONS) pressed.add(e.code); // 이동 키 상태만 계속 추적한다(재개 후 이어서 이동)
+      if (e.code === 'Space') spaceHeld = true;
+      return;
+    }
+    if (import.meta.env.DEV && e.code === 'KeyX') {
+      // [개발 모드 전용] X: 경험치 +10, Shift+X: +100. 구슬을 줍지 않고 레벨업/연속 레벨업을 시험한다.
+      if (!e.repeat && state.is(STATES.PLAYING)) openLevelUpIfNeeded(experience.addXp(e.shiftKey ? 100 : 10));
+      return;
+    }
     if (import.meta.env.DEV && e.code === 'KeyG') {
       if (!e.repeat) state.send('gameOver');
       return;
@@ -754,6 +890,12 @@ export function startGame(canvas) {
     clampPlayer(); // 여백이 넓어졌으므로 이미 가장자리에 있던 플레이어를 안쪽으로 맞춘다.
   });
   enemySprites.load(); // 실패해도 예외 없이 임시 원형으로 대체되므로 결과를 기다리지 않는다.
+
+  if (import.meta.env.DEV) {
+    // [개발 모드 전용] 자동 통합 테스트(tests/gameIntegration.test.js)가 게임 상태를 읽고 시험 상황을 만들기 위한 핸들.
+    // 프로덕션 빌드에서는 코드째 제거된다(tests/prodBuild.test.js가 확인).
+    window.__nineBorders = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime };
+  }
 
   new ResizeObserver(resize).observe(canvas);
   resize();

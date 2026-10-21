@@ -109,9 +109,9 @@ test('무기 슬롯 3개, 종류당 하나, 레벨 최대 5', () => {
   assert.equal(sys.setLevel('zzz', 2), false);
 });
 
-test('기본 구성: 원거리와 근접 무기를 하나씩 가진다', () => {
+test('기본 구성: 시작 무기는 shard 하나뿐이다(pulse는 레벨업 보상으로 얻는다)', () => {
   const sys = createWeaponSystem();
-  assert.deepEqual(sys.slots.map((w) => w.id), ['shard', 'pulse']);
+  assert.deepEqual(sys.slots.map((w) => w.id), ['shard']);
   assert.ok(sys.slots.every((w) => w.level === 1 && w.cooldown === 0));
 });
 
@@ -204,7 +204,7 @@ test('근접 무기: 범위 안의 모든 적을 한 번 때리고 2번에 처�
 });
 
 test('이미 죽은 적은 대상이 되거나 피해를 받지 않는다', () => {
-  const sys = createWeaponSystem(); // 원거리 + 근접
+  const sys = createWeaponSystem({ startingWeapons: ['shard', 'pulse'] }); // 원거리 + 근접
   const e = enemyAt(1, 2040, 2000);
   damageEnemy(e, 100);
   sys.update(0.016, player, [e]);
@@ -214,7 +214,7 @@ test('이미 죽은 적은 대상이 되거나 피해를 받지 않는다', () =
 });
 
 test('정지/게임 오버: 시간이 흐르지 않으면(dt 0 또는 잘못된 값) 쿨다운, 투사체, 효과가 그대로다', () => {
-  const sys = createWeaponSystem();
+  const sys = createWeaponSystem({ startingWeapons: ['shard', 'pulse'] });
   const far = enemyAt(1, 2200, 2000);
   const near = enemyAt(2, 2040, 2000);
   sys.update(0.016, player, [far, near]);
@@ -225,7 +225,7 @@ test('정지/게임 오버: 시간이 흐르지 않으면(dt 0 또는 잘못된 
 });
 
 test('리셋: 투사체/효과를 지우고 쿨다운과 레벨을 되돌린다', () => {
-  const sys = createWeaponSystem();
+  const sys = createWeaponSystem({ startingWeapons: ['shard', 'pulse'] });
   const e = enemyAt(1, 2060, 2000);
   sys.update(0.016, player, [e]);
   sys.setLevel('shard', 4);

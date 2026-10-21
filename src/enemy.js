@@ -24,19 +24,23 @@ export function createEnemy(id, x, y, player, config = ENEMY, kind = 'melee') {
 
 // 적에게 피해를 한 번 준다. 이미 죽은 적이거나 피해가 0 이하/유한하지 않으면 아무것도 바꾸지 않고 null을 돌려준다.
 // 적용되면 { killed }를 돌려준다. HP가 0 이하가 되면 HP를 0으로 두고 dead를 켠다(죽음 처리는 한 번만 일어난다).
+const HP_EPSILON = 1e-9;
 export function damageEnemy(enemy, amount) {
   if (enemy.dead || !Number.isFinite(amount) || amount <= 0) return null;
   enemy.hp = Math.max(0, enemy.hp - amount);
+  if (enemy.hp < HP_EPSILON) enemy.hp = 0; // 소수 피해(레벨 배율)의 부동소수점 잔여값 때문에 살아남지 않게 한다.
   if (enemy.hp > 0) return { killed: false };
   enemy.dead = true;
   return { killed: true };
 }
 
 // 죽은 적을 목록에서 제자리에서 제거하고 제거한 수를 돌려준다. 살아 있는 적의 순서는 유지된다.
-export function removeDeadEnemies(enemies) {
+// onRemove(enemy)를 주면 제거되는 적마다 한 번씩 불러 준다(처치 보상 등). 적은 목록에서 한 번만 제거되므로 한 번만 불린다.
+export function removeDeadEnemies(enemies, onRemove = null) {
   let kept = 0;
   for (let i = 0; i < enemies.length; i++) {
     if (!enemies[i].dead) enemies[kept++] = enemies[i];
+    else if (onRemove) onRemove(enemies[i]);
   }
   const removed = enemies.length - kept;
   enemies.length = kept;

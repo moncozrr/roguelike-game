@@ -5,11 +5,18 @@
 
 import { WEAPONS, WEAPON_RULES, STARTING_WEAPONS, WORLD, ENEMY } from './config.js';
 import { enemyRadius, damageEnemy, findNearestEnemy } from './enemy.js';
+import { strikeChain, createBoomerang, stepBoomerang } from './weaponAttacks.js';
 
 // 레벨을 1~maxLevel 정수로 제한한다. 숫자가 아니거나 NaN이면 1, Infinity는 최대, 소수는 버린다.
 export function clampWeaponLevel(level, maxLevel = WEAPON_RULES.maxLevel) {
   if (typeof level !== 'number' || Number.isNaN(level)) return 1;
   return Math.min(Math.max(Math.trunc(level), 1), maxLevel);
+}
+
+// 무기 레벨에 따른 1회 피해: 기본 피해 × (100 + 20 × (레벨 - 1))% = 100/120/140/160/180%. 피해 외의 능력은 레벨과 무관하다.
+export function weaponDamage(def, level, rules = WEAPON_RULES) {
+  const percent = 100 + (clampWeaponLevel(level, rules.maxLevel) - 1) * rules.damagePercentPerLevel;
+  return (def.damage * percent) / 100;
 }
 
 // 선분(a -> b)과 점(p) 사이 거리의 제곱, 그리고 선분 위 가장 가까운 지점의 비율 t(0~1)
@@ -35,7 +42,8 @@ export function createWeaponSystem({
   const hitRadius = enemyRadius(enemyConfig); // 적 충돌 반지름(표시 크기와 별개)
   let slots = []; // 보유 무기: { id, level, cooldown }
   let projectiles = []; // 날아가는 투사체: { x, y, dx, dy, speed, radius, damage, traveled, maxDistance, weaponId }
-  let effects = []; // 근접 공격 표시 효과: { weaponId, radius, age, duration }
+  let boomerangs = []; // 날아가는 부메랑(weaponAttacks.js의 createBoomerang 참고)
+  let effects = []; // 표시 효과: 근접 { weaponId, radius, age, duration }, 연쇄 번개 { weaponId, points, age, duration }
 
   const find = (id) => slots.find((w) => w.id === id) ?? null;
 
@@ -47,7 +55,7 @@ export function createWeaponSystem({
     return true;
   }
 
-  function fireProjectile(def, id, player, target) {
+  function fireProjectile(def, damage, id, player, target) {
     let dx = target.x - player.x;
     let dy = target.y - player.y;
     const len = Math.hypot(dx, dy);
@@ -65,7 +73,7 @@ export function createWeaponSystem({
       dy,
       speed: def.projectileSpeed,
       radius: def.projectileRadius,
-      damage: def.damage,
+      damage,
       traveled: 0,
       maxDistance: def.projectileMaxDistance,
       weaponId: id,
@@ -73,13 +81,13 @@ export function createWeaponSystem({
   }
 
   // 범위 안의 살아 있는 모든 적을 한 번씩 때린다(적마다 피해는 한 번).
-  function strikeArea(def, id, player, enemies) {
+  function strikeArea(def, damage, id, player, enemies) {
     const rangeSq = def.range * def.range;
     for (const e of enemies) {
       if (e.dead) continue;
       const dx = e.x - player.x;
       const dy = e.y - player.y;
-      if (dx * dx + dy * dy <= rangeSq) damageEnemy(e, def.damage);
+      if (dx * dx + dy * dy <= rangeSq) damageEnemy(e, damage);
     }
     effects.push({ weaponId: id, radius: def.range, age: 0, duration: def.flashDuration });
   }
@@ -119,8 +127,26 @@ export function createWeaponSystem({
     get projectiles() {
       return projectiles;
     },
+    get boomerangs() {
+      return boomerangs;
+    },
     get effects() {
       return effects;
+    },
+    get catalog() {
+      return defs;
+    },
+    // 새 무기를 지금 얻을 수 있는지(모르는 무기/이미 보유/슬롯 가득이면 false)
+    canEquip: (id) => Object.hasOwn(defs, id) && !find(id) && slots.length < rules.maxSlots,
+    // 보유 무기를 지금 강화할 수 있는지(없거나 최대 레벨이면 false)
+    canUpgrade: (id) => (find(id)?.level ?? rules.maxLevel) < rules.maxLevel,
+    levelOf: (id) => find(id)?.level ?? 0,
+    // 보유 무기의 레벨을 정확히 1 올린다. 성공하면 true, 없거나 최대 레벨이면 false.
+    upgrade(id) {
+      const weapon = find(id);
+      if (!weapon || weapon.level >= rules.maxLevel) return false;
+      weapon.level += 1;
+      return true;
     },
     // 무기를 얻는다. 성공하면 true. 이미 있거나 슬롯이 가득 찼거나 모르는 무기면 false.
     equip,
@@ -142,17 +168,24 @@ export function createWeaponSystem({
         const def = defs[w.id];
         const target = findNearestEnemy(enemies, player, def.range);
         if (!target) continue;
-        if (def.type === 'projectile') fireProjectile(def, w.id, player, target);
-        else strikeArea(def, w.id, player, enemies);
+        const damage = weaponDamage(def, w.level, rules);
+        if (def.type === 'projectile') fireProjectile(def, damage, w.id, player, target);
+        else if (def.type === 'boomerang') boomerangs.push(createBoomerang(def, damage, player, target));
+        else if (def.type === 'chain') {
+          const points = strikeChain(def, damage, player, enemies);
+          if (points) effects.push({ weaponId: w.id, points, age: 0, duration: def.flashDuration });
+        } else strikeArea(def, damage, w.id, player, enemies);
         w.cooldown = def.cooldown;
       }
       projectiles = projectiles.filter((p) => stepProjectile(p, step, enemies));
+      boomerangs = boomerangs.filter((b) => stepBoomerang(b, step, player, enemies, hitRadius));
       for (const f of effects) f.age += step;
       effects = effects.filter((f) => f.age < f.duration);
     },
     // 새 런: 투사체와 효과를 지우고, 무기를 시작 구성으로 되돌린다(레벨 1, 쿨다운 0).
     reset() {
       projectiles = [];
+      boomerangs = [];
       effects = [];
       slots = [];
       for (const id of startingWeapons) equip(id);

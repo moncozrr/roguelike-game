@@ -87,15 +87,23 @@ export const TIMELINE = {
 export const WEAPON_RULES = {
   maxSlots: 3,
   maxLevel: 5,
+  // 무기 레벨 피해 배율 = 1 + 0.2 × (레벨 - 1). 부동소수점 오차를 피하려고 정수 퍼센트로 계산한다(100/120/140/160/180%).
+  // 레벨이 올라도 공격력만 늘고 공격 주기, 사거리, 연쇄 횟수 등은 변하지 않는다.
+  damagePercentPerLevel: 20,
 };
 
 // 무기 정의. 아래 값은 모두 테스트용 [임시]값이며 확정된 밸런스나 이름이 아니다.
-// 공통 필드: name, type('projectile' | 'area'), damage(1회 피해), cooldown(초), range(자동 조준 거리, 적 중심까지 px)
+// 공통 필드: name, description(보상 화면 설명), type('projectile' | 'area' | 'chain' | 'boomerang'), damage(1회 피해), cooldown(초), range(자동 조준 거리, 적 중심까지 px)
 // projectile 전용: projectileSpeed(px/초), projectileRadius(px), projectileMaxDistance(날아갈 수 있는 최대 거리, px)
 // area 전용: 플레이어 중심 반경 range 안의 모든 적을 한 번에 때린다. flashDuration은 표시 효과 시간(초)
+// chain 전용: 가장 가까운 적(range 이내)에서 시작해 직전 적에서 chainDistance 이내의 가장 가까운 다른 적으로 이어진다.
+//   chainCount는 최초 타깃을 포함한 최대 타격 수. 한 번의 공격에서 같은 적은 한 번만 맞는다.
+// boomerang 전용: 타깃 쪽으로 날아가 도달(또는 maxDistance)하면 플레이어 쪽으로 돌아온다. 왕복 중 적마다 한 번만 맞힌다.
+//   catchRadius: 돌아온 투사체가 플레이어에 닿았다고 보는 거리, maxLifetime: 안전장치(초)
 export const WEAPONS = {
   shard: {
     name: '원거리 테스트 무기',
+    description: '가장 가까운 적에게 투사체 발사',
     type: 'projectile',
     damage: 3,
     cooldown: 0.6,
@@ -106,16 +114,41 @@ export const WEAPONS = {
   },
   pulse: {
     name: '근접 테스트 무기',
+    description: '주변 모든 적을 범위 공격',
     type: 'area',
     damage: 5,
     cooldown: 1.0,
     range: 80,
     flashDuration: 0.15,
   },
+  chainLightning: {
+    name: 'Chain Lightning',
+    description: '가까운 적에서 시작해 최대 3마리에 연쇄',
+    type: 'chain',
+    damage: 2, // 적 한 명당
+    cooldown: 1.2,
+    range: 180,
+    chainCount: 3,
+    chainDistance: 100,
+    flashDuration: 0.15,
+  },
+  boomerangBlade: {
+    name: 'Boomerang Blade',
+    description: '날아갔다 돌아오며 경로의 적을 공격',
+    type: 'boomerang',
+    damage: 2, // 적 한 명당(왕복 한 번에 적마다 한 번)
+    cooldown: 2,
+    range: 220,
+    projectileSpeed: 300,
+    projectileRadius: 8,
+    maxDistance: 300, // 바깥쪽으로 날아갈 수 있는 최대 거리(px). 도달하면 귀환한다.
+    catchRadius: 16,
+    maxLifetime: 6,
+  },
 };
 
-// [임시] 새 런을 시작할 때 갖고 있는 무기(획득 UI가 생기기 전의 테스트용)
-export const STARTING_WEAPONS = ['shard', 'pulse'];
+// 새 런을 시작할 때 갖고 있는 무기. 나머지 무기는 레벨업 보상으로 얻는다.
+export const STARTING_WEAPONS = ['shard'];
 
 // 원거리 적과 그 투사체. 아래 값은 모두 테스트용 [임시]값이며 확정된 밸런스가 아니다.
 // 원거리 적은 일반 원혼과 같은 추적 AI를 쓰고(거리 유지 없음), 플레이어가 range 안에 있으면 쿨다운마다 쏜다.
@@ -127,4 +160,19 @@ export const ENEMY_PROJECTILE = {
   maxDistance: 350, // 최대 비행 거리(px). 넘으면 사라진다.
   range: 300, // 발사 사거리(적 중심 ~ 플레이어 중심, px). 최대 비행 거리보다 짧아서 쏜 탄이 닿을 수 있다.
   cooldown: 2.5, // 발사 간격(초). 생성 직후에도 이 시간이 지나야 처음 쏜다.
+};
+
+// 경험치와 레벨업. 아래 값은 모두 테스트용 [임시]값이며 확정된 밸런스가 아니다.
+export const XP = {
+  orbValue: { melee: 1, ranged: 2 }, // 적 종류별 구슬 경험치(적 처치 1회당 구슬 1개)
+  firstLevelXp: 8, // 1레벨 -> 2레벨에 필요한 경험치
+  levelXpIncrease: 4, // 이후 레벨마다 요구량이 늘어나는 양(8, 12, 16, 20, ...)
+  orbDrawRadius: 6, // 구슬을 그리는 크기(px, 표시용)
+};
+
+// 경험치 자석: 구슬을 줍는 반경(플레이어 중심 ~ 구슬 중심). 무기 슬롯/레벨과 별개의 강화이다.
+export const MAGNET = {
+  basePickupRadius: 60, // [임시] 기본 줍기 반경(px)
+  radiusPerLevel: 6, // [임시] 강화 1회당 늘어나는 반경(px): 60 / 66 / 72 / 78
+  maxLevel: 3,
 };
