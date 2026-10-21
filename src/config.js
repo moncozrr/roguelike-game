@@ -29,6 +29,22 @@ export const BOUNDARY = {
   // 반경 = 기본 반경 × (1 + 레벨 × 0.1). 부동소수점 오차를 피하려고 정수 퍼센트로 계산한다.
   radiusUpgradePercent: 10,
   maxRadiusLevel: 3,
+  // 내구도(단계 10). 경계는 내구도가 0이어도 사라지지 않는다.
+  maxDurability: 100, // [임시] 최대 내구도(비율로만 쓰이므로 회복 속도에는 영향이 없다)
+  recoveryPercentPerSecond: 5, // [확정] 회복 ON이고 피해가 없을 때 초당 최대 내구도의 5%
+  recoveryDelay: 3, // [임시] 마지막 피해 후 이 시간(초) 동안은 회복하지 않는다(문서에 값이 없음)
+  recoveryDefaultOn: true, // [임시] 새 런에서 회복 기능의 기본 상태
+  weakenStepLossPercent: 10, // [확정] 내구도 손실 10%마다
+  weakenPercentPerStep: 5, // [확정] 경계 버프가 5%씩 약해진다
+  maxWeakenPercent: 50, // [확정] 최대 약화
+  attackBuffPercent: 50, // [임시] 경계 안 플레이어 공격력 증가 버프(기본 효과, 약화 적용 전)
+  enemySharePercent: 50, // [확정] 인간형 적/보스가 공유하는 버프 비율
+  devDamagePercent: 10, // [개발 전용] B 키 한 번에 깎는 내구도(최대 내구도 대비 %)
+};
+
+// 보스(단계 11에서 등장). 보스는 일반 적보다 약간 크게 그린다.
+export const BOSS = {
+  sizeScale: 1.1, // [임시] 표시 크기 배율(+10%). 충돌 판정은 바꾸지 않는다.
 };
 
 // 일반 적(원혼). 아래 값은 모두 테스트용 [임시]값이며 확정된 밸런스가 아니다.

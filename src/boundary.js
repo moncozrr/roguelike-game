@@ -19,14 +19,62 @@ export function radiusForLevel(baseRadius, level, percentPerLevel = BOUNDARY.rad
 // center: 월드 좌표 {x, y}. 값만 복사해 두므로 원본 객체(예: 플레이어)가 움직여도 경계는 움직이지 않는다.
 // 기본 반경은 경계를 만들 때 한 번 정해지는 읽기 전용 값이다(바꾸려면 새 경계를 만든다. 새 런마다 새로 만든다).
 // 기본 반경이 유한한 양수가 아니면 캔버스 arc가 오류를 내거나 판정이 조용히 틀어지므로, 만들 때 바로 오류를 낸다.
-export function createBoundary(center, { baseRadius = BOUNDARY.baseRadius, radiusLevel = 0 } = {}) {
+export function createBoundary(
+  center,
+  { baseRadius = BOUNDARY.baseRadius, radiusLevel = 0, maxDurability = BOUNDARY.maxDurability, recoveryOn = BOUNDARY.recoveryDefaultOn, rules = BOUNDARY } = {},
+) {
   if (typeof baseRadius !== 'number' || !Number.isFinite(baseRadius) || baseRadius <= 0) {
     throw new RangeError(`경계 기본 반경은 0보다 큰 유한한 숫자여야 합니다: ${String(baseRadius)}`);
   }
+  if (typeof maxDurability !== 'number' || !Number.isFinite(maxDurability) || maxDurability <= 0) {
+    throw new RangeError(`경계 최대 내구도는 0보다 큰 유한한 숫자여야 합니다: ${String(maxDurability)}`);
+  }
   const fixedCenter = Object.freeze({ x: center.x, y: center.y });
   let level = clampRadiusLevel(radiusLevel);
+  let durability = maxDurability; // 처음에는 가득 차 있다.
+  let recovering = recoveryOn === true;
+  let sinceDamage = Infinity; // 마지막 피해 후 지난 시간(초)
 
   return {
+    // 내구도: 항상 0~최대 범위. 0이 되어도 경계는 파괴되지 않고(반경/판정 그대로) 버프만 약해진다.
+    get maxDurability() {
+      return maxDurability;
+    },
+    get durability() {
+      return durability;
+    },
+    get recoveryOn() {
+      return recovering;
+    },
+    get timeSinceDamage() {
+      return sinceDamage;
+    },
+    // 피해를 준다. 유한한 양수일 때만 적용하고(적용되면 true), 피해가 들어오면 회복 대기 시간이 처음부터 다시 시작된다.
+    damage(amount) {
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return false;
+      durability = Math.max(0, durability - amount);
+      sinceDamage = 0;
+      return true;
+    },
+    setRecovery(on) {
+      recovering = on === true;
+    },
+    toggleRecovery() {
+      recovering = !recovering;
+      return recovering;
+    },
+    // dt초 진행. 회복이 켜져 있고 마지막 피해 후 recoveryDelay가 지났으면 초당 최대 내구도의 5%씩 회복한다.
+    // 한 프레임 안에서 대기 시간이 끝나는 경우에는 끝난 뒤의 시간만 회복에 쓰므로 프레임 속도와 무관하다.
+    update(dt) {
+      if (typeof dt !== 'number' || !Number.isFinite(dt) || dt <= 0) return;
+      const before = sinceDamage;
+      sinceDamage = before + dt;
+      if (!recovering || durability >= maxDurability) return;
+      const recoverTime = Math.min(dt, Math.max(0, sinceDamage - rules.recoveryDelay));
+      if (recoverTime <= 0) return;
+      durability = Math.min(maxDurability, durability + (maxDurability * rules.recoveryPercentPerSecond * recoverTime) / 100);
+    },
+
     center: fixedCenter,
     // 기본 반경과 강화 레벨은 따로 관리한다. getter만 있어서 값을 대입하려 하면 오류가 난다(조용히 무시되지 않음).
     get baseRadius() {

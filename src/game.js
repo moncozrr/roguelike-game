@@ -2,11 +2,12 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
-import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE } from './config.js';
+import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE, BOUNDARY, BOSS } from './config.js';
 import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
 import { createBoundary } from './boundary.js';
+import { attackMultiplier } from './boundaryBuffs.js';
 import { createEnemy, updateEnemies, enemyRadius, removeDeadEnemies } from './enemy.js';
 import { createWeaponSystem } from './weapons.js';
 import { createEnemyProjectileSystem } from './enemyProjectiles.js';
@@ -121,7 +122,8 @@ export function startGame(canvas) {
   // 무기를 갱신하고, 이번 공격으로 죽은 적을 목록에서 제거한다(제거된 적은 이후 이동/밀어내기/접촉/생성 수 계산에서 빠진다).
   // 제거되는 적마다 경험치 구슬을 한 개 만든다(한 적에게서는 한 번만).
   function updateWeaponSystem(dt) {
-    weapons.update(dt, player, enemies);
+    // 경계 안에 있는 동안 공격력 버프(내구도에 따라 약해짐)가 발동하는 공격에 적용된다.
+    weapons.update(dt, player, enemies, attackMultiplier(boundary, player, 'player'));
     removeDeadEnemies(enemies, (enemy) => experience.spawnOrbFor(enemy));
   }
 
@@ -533,6 +535,7 @@ export function startGame(canvas) {
     ctx.fillText(`enemies: ${enemies.length} / ${SPAWN.maxEnemies}`, 12, 60);
     ctx.fillText(`weapons: ${weapons.slots.map((w) => `${w.id} Lv${w.level} cd ${w.cooldown.toFixed(2)}`).join(' | ')}  projectiles: ${weapons.projectiles.length}`, 12, 92);
     ctx.fillText(`magnet: Lv${experience.magnetLevel} r=${experience.pickupRadius}  orbs: ${experience.orbs.length}  boomerangs: ${weapons.boomerangs.length}  [X] +10xp  [Shift+X] +100xp`, 12, 124);
+    ctx.fillText(`boundary durability: ${boundary.durability.toFixed(1)} / ${boundary.maxDurability}  recovery: ${boundary.recoveryOn ? 'ON' : 'OFF'}  sinceDamage: ${Math.min(boundary.timeSinceDamage, 999).toFixed(1)}  [B] -10%  [Shift+B] -100%`, 12, 140);
     ctx.fillText(`enemy projectiles: ${enemyProjectiles.projectiles.length}`, 12, 108);
     ctx.fillText(`hp: ${health.hp} / ${health.maxHp}  protect: ${health.hitProtection.toFixed(2)}  dashInv: ${health.dashInvuln.toFixed(2)}`, 12, 76);
     ctx.restore();
@@ -554,7 +557,22 @@ export function startGame(canvas) {
     }
     ctx.restore();
     drawHealthBar();
+    drawBoundaryStatus();
     if (import.meta.env.DEV) drawDevCoords(cam);
+  }
+
+  // 화면 오른쪽 위: 경계 내구도와 회복 ON/OFF 표시(임시 스타일).
+  function drawBoundaryStatus() {
+    const percent = Math.round((boundary.durability * 100) / boundary.maxDurability);
+    ctx.save();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = insideBoundary ? '#7fe0d6' : '#e8e6e3';
+    ctx.font = '600 14px system-ui, "Malgun Gothic", sans-serif';
+    ctx.fillText(`경계 내구도 ${percent}%  ·  회복 ${boundary.recoveryOn ? 'ON' : 'OFF'} [R]`, size.width - 16, 14);
+    ctx.restore();
   }
 
   // 화면 왼쪽 아래의 HP 바. 개발용 글자(왼쪽 위)와 겹치지 않는다.
@@ -784,7 +802,7 @@ export function startGame(canvas) {
     const order = enemies.slice().sort((a, b) => a.y - b.y); // 그리기 순서만 정렬하고 원래 목록은 건드리지 않는다.
     let i = 0;
     const drawEnemy = (e) => {
-      enemySprites.draw(ctx, e.x, e.y, e.facing, snap);
+      enemySprites.draw(ctx, e.x, e.y, e.facing, snap, e.isBoss ? BOSS.sizeScale : 1);
       if (e.kind === 'ranged') drawRangedMarker(e);
     };
     for (; i < order.length && order[i].y < player.y; i++) drawEnemy(order[i]);
@@ -830,6 +848,7 @@ export function startGame(canvas) {
     if (state.is(STATES.PLAYING)) {
       update(dt); // 게임 진행 관련 업데이트는 실행 중에만
       refreshBoundaryState(); // 이동/대시가 끝난 위치 기준으로 경계 안/밖 갱신
+      boundary.update(dt); // 내구도 회복(켜져 있고 피해가 없을 때). 정지 중에는 불리지 않아 멈춘다.
       updateWeaponSystem(dt); // 자동 공격과 투사체, 죽은 적 제거(이동이 끝난 플레이어 위치 기준)
       updateEnemySystem(dt); // 적 생성과 이동(플레이어 위치 기준)
       updateEnemyProjectileSystem(dt); // 원거리 적 발사와 투사체 명중(적 이동 후, 접촉 피해 전)
@@ -884,6 +903,16 @@ export function startGame(canvas) {
       if (e.code === 'Space') spaceHeld = true;
       return;
     }
+    if (e.code === 'KeyR') {
+      // R: 경계 회복 ON/OFF. 실행 중에만 바꾼다.
+      if (!e.repeat && state.is(STATES.PLAYING)) boundary.toggleRecovery();
+      return;
+    }
+    if (import.meta.env.DEV && e.code === 'KeyB') {
+      // [개발 모드 전용] B: 경계 내구도를 최대의 10% 깎고, Shift+B는 전부 깎는다(적이 경계를 공격하는 규칙은 아직 미정).
+      if (!e.repeat && state.is(STATES.PLAYING)) boundary.damage(e.shiftKey ? boundary.maxDurability : (boundary.maxDurability * BOUNDARY.devDamagePercent) / 100);
+      return;
+    }
     if (import.meta.env.DEV && e.code === 'KeyX') {
       // [개발 모드 전용] X: 경험치 +10, Shift+X: +100. 구슬을 줍지 않고 레벨업/연속 레벨업을 시험한다.
       if (!e.repeat && state.is(STATES.PLAYING)) openLevelUpIfNeeded(experience.addXp(e.shiftKey ? 100 : 10));
@@ -924,7 +953,7 @@ export function startGame(canvas) {
   if (import.meta.env.DEV) {
     // [개발 모드 전용] 자동 통합 테스트(tests/gameIntegration.test.js)가 게임 상태를 읽고 시험 상황을 만들기 위한 핸들.
     // 프로덕션 빌드에서는 코드째 제거된다(tests/prodBuild.test.js가 확인).
-    window.__nineBorders = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime };
+    window.__nineBorders = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime, boundary: () => boundary };
   }
 
   new ResizeObserver(resize).observe(canvas);

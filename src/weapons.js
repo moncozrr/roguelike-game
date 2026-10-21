@@ -163,7 +163,9 @@ export function createWeaponSystem({
     },
     // dt초 동안 진행한다. player: {x, y}, enemies: 적 목록(살아 있는 적만 대상이 된다).
     // 쿨다운이 끝난 무기는 사거리 안에 적이 있을 때 자동으로 발동한다. 대상이 없으면 쿨다운은 0에서 기다린다.
-    update(dt, player, enemies) {
+    // damageScale: 발동 순간의 피해 배율(경계 버프 등, 기본 1). 이미 날아가는 투사체의 피해는 바뀌지 않는다.
+    update(dt, player, enemies, damageScale = 1) {
+      const scale = Number.isFinite(damageScale) && damageScale > 0 ? damageScale : 1;
       const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
       for (const w of slots) {
         w.cooldown = Math.max(0, w.cooldown - step);
@@ -171,7 +173,7 @@ export function createWeaponSystem({
         const def = defs[w.id];
         const target = findNearestEnemy(enemies, player, def.range);
         if (!target) continue;
-        const damage = weaponDamage(def, w.level, rules);
+        const damage = weaponDamage(def, w.level, rules) * scale;
         if (def.type === 'projectile') fireProjectile(def, damage, w.id, player, target);
         else if (def.type === 'boomerang') boomerangs.push(createBoomerang(def, damage, player, target));
         else if (def.type === 'chain') {

@@ -28,6 +28,8 @@ test('프로덕션 빌드에는 개발 전용 키(X, G), 개발 HUD, 테스트�
     assert.ok(js.includes('Digit1'), '보상 선택 키(1/2/3)는 프로덕션에도 있어야 합니다');
     assert.ok(!js.includes('KeyX'), 'XP 테스트 키(KeyX)가 프로덕션 번들에 있습니다');
     assert.ok(!js.includes('KeyG'), '게임 오버 개발 키(KeyG)가 프로덕션 번들에 있습니다');
+    assert.ok(!js.includes('KeyB'), '경계 내구도 개발 키(KeyB)가 프로덕션 번들에 있습니다');
+    assert.ok(js.includes('KeyR'), '경계 회복 토글 키(R)는 프로덕션에도 있어야 합니다');
     assert.ok(!js.includes('+10xp'), '개발 HUD 문구가 프로덕션 번들에 있습니다');
     assert.ok(!js.includes('__nineBorders'), '통합 테스트용 개발 핸들이 프로덕션 번들에 있습니다');
   } finally {

@@ -107,13 +107,13 @@ export function createEnemySprites(options = {}) {
     return loadPromise;
   }
 
-  function drawFallback(ctx, x, y) {
+  function drawFallback(ctx, x, y, sizeScale = 1) {
     ctx.save();
     ctx.fillStyle = 'rgba(120, 30, 50, 0.85)';
     ctx.strokeStyle = 'rgba(64, 200, 190, 0.9)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, fallbackRadius, 0, Math.PI * 2);
+    ctx.arc(x, y, fallbackRadius * sizeScale, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -121,13 +121,14 @@ export function createEnemySprites(options = {}) {
 
   // (x, y): 적의 월드 좌표(충돌 원의 중심). facing: 'left' | 'right'.
   // snap: { camX, camY, dpr } 를 주면 화면에서 정수 픽셀에 맞춰 그린다(도트가 번져 보이지 않게).
-  function draw(ctx, x, y, facing, snap = null) {
+  // sizeScale: 표시 크기 배율(보스는 1.1, 기본 1). 충돌 판정과는 무관하다.
+  function draw(ctx, x, y, facing, snap = null, sizeScale = 1) {
     const sprite = pickSprite(sprites, facing);
     if (!sprite) {
-      drawFallback(ctx, x, y);
+      drawFallback(ctx, x, y, sizeScale);
       return;
     }
-    const scale = displaySize / sprite.width; // 원본 크기와 표시 크기는 별개
+    const scale = (displaySize * sizeScale) / sprite.width; // 원본 크기와 표시 크기는 별개
     const w = sprite.width * scale;
     const h = sprite.height * scale;
     let dx = x - sprite.anchorX * scale;
