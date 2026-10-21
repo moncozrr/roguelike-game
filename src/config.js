@@ -37,6 +37,7 @@ export const ENEMY = {
   displaySize: 48, // 화면에 그리는 크기(px). 충돌 반지름과 별개다.
   collisionRadiusRatio: 0.3, // 충돌 반지름 = 표시 크기 × 0.3 (48px이면 14.4px)
   speed: 80, // 초당 이동 픽셀(플레이어 240보다 느림)
+  maxHp: 10, // [임시] 원혼 최대 HP. 원거리 3 피해는 4번, 근접 5 피해는 2번에 처치된다.
   facingDeadZone: 2, // 플레이어와의 수평 거리가 이보다 작으면 이전 방향을 유지(px, 깜빡임 방지)
   // 적끼리 밀어내기 조정값(구현 튜닝용). 한 프레임에 겹침을 푸는 반복 횟수와 한 번에 푸는 비율.
   // 측정 결과(100마리 밀집): 강도 1.0은 떨리고, 3회/0.5는 겹침이 지름의 27%까지 남아서 6회/0.7로 정했다.
@@ -80,3 +81,37 @@ export const TIMELINE = {
   finalBossAt: 180, // 3:00 최종 보스 출현(중간 보스 생존 여부와 무관)
   targetTime: 300, // 5:00 테스트 목표 시간. 표시일 뿐 런을 종료하지 않는다.
 };
+
+// 무기 규칙. 슬롯 수와 최대 레벨은 단계 6 기획 기준이다. 무기 종류마다 하나만 가질 수 있다.
+export const WEAPON_RULES = {
+  maxSlots: 3,
+  maxLevel: 5,
+};
+
+// 무기 정의. 아래 값은 모두 테스트용 [임시]값이며 확정된 밸런스나 이름이 아니다.
+// 공통 필드: name, type('projectile' | 'area'), damage(1회 피해), cooldown(초), range(자동 조준 거리, 적 중심까지 px)
+// projectile 전용: projectileSpeed(px/초), projectileRadius(px), projectileMaxDistance(날아갈 수 있는 최대 거리, px)
+// area 전용: 플레이어 중심 반경 range 안의 모든 적을 한 번에 때린다. flashDuration은 표시 효과 시간(초)
+export const WEAPONS = {
+  shard: {
+    name: '원거리 테스트 무기',
+    type: 'projectile',
+    damage: 3,
+    cooldown: 0.6,
+    range: 320,
+    projectileSpeed: 420,
+    projectileRadius: 5,
+    projectileMaxDistance: 700,
+  },
+  pulse: {
+    name: '근접 테스트 무기',
+    type: 'area',
+    damage: 5,
+    cooldown: 1.0,
+    range: 80,
+    flashDuration: 0.15,
+  },
+};
+
+// [임시] 새 런을 시작할 때 갖고 있는 무기(획득 UI가 생기기 전의 테스트용)
+export const STARTING_WEAPONS = ['shard', 'pulse'];

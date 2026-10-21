@@ -7,7 +7,8 @@ import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
 import { createBoundary } from './boundary.js';
-import { createEnemy, updateEnemies, enemyRadius } from './enemy.js';
+import { createEnemy, updateEnemies, enemyRadius, removeDeadEnemies } from './enemy.js';
+import { createWeaponSystem } from './weapons.js';
 import { createPlayerHealth, anyContact } from './combat.js';
 import { createSpawner } from './spawner.js';
 import { createEnemySprites } from './enemySprites.js';
@@ -104,6 +105,15 @@ export function startGame(canvas) {
   // 플레이어 체력: HP, 피격 후 보호, 대시 무적(서로 독립). 판정 규칙은 combat.js에 있다.
   const health = createPlayerHealth();
 
+  // 무기: 자동 공격(가장 가까운 살아 있는 적), 투사체, 근접 공격. 게임이 실행 중일 때만 갱신되므로 정지/게임 오버에서는 멈춘다.
+  const weapons = createWeaponSystem();
+
+  // 무기를 갱신하고, 이번 공격으로 죽은 적을 목록에서 제거한다(제거된 적은 이후 이동/밀어내기/접촉/생성 수 계산에서 빠진다).
+  function updateWeaponSystem(dt) {
+    weapons.update(dt, player, enemies);
+    removeDeadEnemies(enemies);
+  }
+
   // 적과 닿았으면 피해를 한 번 시도한다(여러 마리가 닿아도 한 번). HP가 0이 되면 게임 오버.
   // 게임이 실행 중일 때만 불리고, 대시 중에도 불린다(update()의 대시 조기 반환과 무관한 위치에서 호출).
   function updateContactDamage() {
@@ -142,6 +152,7 @@ export function startGame(canvas) {
     enemies.length = 0; // 이전 런의 적과 생성기 상태(타이머, 소수 이월값)를 모두 지운다.
     nextEnemyId = 1;
     spawner.reset();
+    weapons.reset(); // 투사체/효과를 지우고 무기를 시작 구성(레벨 1, 쿨다운 0)으로 되돌림
     health.reset(); // HP와 두 보호 타이머(피격 후 보호, 대시 무적)를 초기화
     gameTime = devOptions.startTime;
     timeline.reset();
@@ -448,6 +459,7 @@ export function startGame(canvas) {
     const dist = boundary.distanceTo(player).toFixed(1);
     ctx.fillText(`boundary: ${insideBoundary ? 'inside' : 'outside'} (d=${dist} / r=${boundary.radius})`, 12, 44);
     ctx.fillText(`enemies: ${enemies.length} / ${SPAWN.maxEnemies}`, 12, 60);
+    ctx.fillText(`weapons: ${weapons.slots.map((w) => `${w.id} Lv${w.level} cd ${w.cooldown.toFixed(2)}`).join(' | ')}  projectiles: ${weapons.projectiles.length}`, 12, 92);
     ctx.fillText(`hp: ${health.hp} / ${health.maxHp}  protect: ${health.hitProtection.toFixed(2)}  dashInv: ${health.dashInvuln.toFixed(2)}`, 12, 76);
     ctx.restore();
   }
@@ -536,6 +548,38 @@ export function startGame(canvas) {
     ctx.restore();
   }
 
+  // 근접 공격 표시: 플레이어를 중심으로 공격 범위까지 퍼지는 고리(임시 스타일). 플레이어/적 아래에 그린다.
+  function drawWeaponEffects() {
+    ctx.save();
+    ctx.lineWidth = 3;
+    for (const f of weapons.effects) {
+      const t = Math.min(f.age / f.duration, 1);
+      ctx.globalAlpha = 0.8 * (1 - t);
+      ctx.strokeStyle = '#e8c36a';
+      ctx.fillStyle = 'rgba(232, 195, 106, 0.15)';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, f.radius * (0.4 + 0.6 * t), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 투사체(임시 스타일: 작은 밝은 원). 적과 플레이어 위에 그린다.
+  function drawProjectiles() {
+    ctx.save();
+    ctx.fillStyle = '#f2e6b0';
+    ctx.strokeStyle = '#c9a24a';
+    ctx.lineWidth = 1.5;
+    for (const p of weapons.projectiles) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // 적과 플레이어를 y 좌표 순서로 그린다: 플레이어보다 위쪽(y가 작은) 적은 플레이어 뒤에,
   // 아래쪽(y가 같거나 큰) 적은 플레이어 앞에 그려서 겹칠 때 앞뒤가 자연스럽게 보이게 한다.
   function drawEntities(cam) {
@@ -564,7 +608,9 @@ export function startGame(canvas) {
       drawDebugGridCrosses(viewRect(cam, size));
       drawWorldMarkers();
     }
+    drawWeaponEffects();
     drawEntities(cam); // 적(경계 위)과 플레이어
+    drawProjectiles();
     ctx.restore();
 
     // 화면 레이어: HUD와 오버레이는 화면에 고정된다.
@@ -579,6 +625,7 @@ export function startGame(canvas) {
     if (state.is(STATES.PLAYING)) {
       update(dt); // 게임 진행 관련 업데이트는 실행 중에만
       refreshBoundaryState(); // 이동/대시가 끝난 위치 기준으로 경계 안/밖 갱신
+      updateWeaponSystem(dt); // 자동 공격과 투사체, 죽은 적 제거(이동이 끝난 플레이어 위치 기준)
       updateEnemySystem(dt); // 적 생성과 이동(플레이어 위치 기준)
       updateContactDamage(); // 이동이 끝난 위치 기준 접촉 피해. HP 0이면 여기서 게임 오버가 된다.
     }
