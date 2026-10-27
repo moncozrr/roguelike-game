@@ -42,7 +42,7 @@ function simulate(seed, { untilTime = 360, onFrame, keepFinalAlive = false } = {
     h,
     maxSeenId: 0,
     spawnedAtMinute: {}, // 분 경계에서의 누적 생성 수(번호표 최댓값)
-    bossAppeared: {}, // 'miniBoss'/'finalBoss' -> 처음 보인 게임 시간
+    bossAppeared: {}, // 'miniBoss'/'secondBoss'/'finalBoss' -> 처음 보인 게임 시간
     maxEnemies: 0,
     maxProjectiles: 0,
     maxEnemyProjectiles: 0,
@@ -84,8 +84,7 @@ function simulate(seed, { untilTime = 360, onFrame, keepFinalAlive = false } = {
     const time = g.gameTime();
     for (const e of g.enemies) {
       if (e.id > obs.maxSeenId) obs.maxSeenId = e.id;
-      if (e.kind === 'miniBoss' && !(e.kind in obs.bossAppeared)) obs.bossAppeared[e.kind] = time;
-      if (e.kind === 'finalBoss' && !(e.kind in obs.bossAppeared)) obs.bossAppeared[e.kind] = time;
+      if (e.isBoss && !(e.kind in obs.bossAppeared)) obs.bossAppeared[e.kind] = time;
     }
     const minute = Math.floor(time / 60);
     if (!(minute in obs.spawnedAtMinute)) obs.spawnedAtMinute[minute] = obs.maxSeenId;
@@ -96,6 +95,7 @@ function simulate(seed, { untilTime = 360, onFrame, keepFinalAlive = false } = {
     obs.maxEffects = Math.max(obs.maxEffects, g.weapons.effects.length);
     obs.maxOrbs = Math.max(obs.maxOrbs, g.experience.orbs.length);
     if (keepFinalAlive) for (const e of g.enemies) if (e.kind === 'finalBoss') e.hp = e.maxHp;
+    if (obs.normalAtFinalBoss === undefined && time >= TIMELINE.finalBossAt) obs.normalAtFinalBoss = g.enemies.filter((e) => !e.isBoss).length; // 최종 보스가 나오는 5:00 시점에 남아 있는 일반 적
     onFrame?.(h, obs, time);
   }
   return obs;
@@ -110,12 +110,13 @@ test('수직 슬라이스: 6분 연속 진행(일반 적 방치) - 보스 출현
     const g = obs.h.game;
     log('summary', JSON.stringify({ frames: obs.frames, spawnedAtMinute: obs.spawnedAtMinute, bossAppeared: obs.bossAppeared, maxEnemies: obs.maxEnemies, maxProjectiles: obs.maxProjectiles, maxEnemyProjectiles: obs.maxEnemyProjectiles, maxBoomerangs: obs.maxBoomerangs, maxEffects: obs.maxEffects, maxOrbs: obs.maxOrbs, levelUpScreens: obs.levelUpScreens, boundaryScreens: obs.boundaryScreens, ended: obs.ended, level: g.experience.level, finalState: g.state.current }));
     // 5:00(300초)을 넘어서까지 계속 진행되었다(최종 보스를 못 잡았거나 잡았다면 victory로 끝났을 수 있으므로 둘 중 하나)
-    assert.ok(g.gameTime() >= TIMELINE.targetTime || obs.ended === 'victory', `진행이 ${g.gameTime().toFixed(1)}초에서 멈춤: ${obs.ended}`);
-    // 보스 출현 시각: 중간 보스 2:00, 최종 보스 3:00(프레임 한 번 이내 오차)
+    assert.ok(g.gameTime() >= TIMELINE.finalBossAt || obs.ended === 'victory', `진행이 ${g.gameTime().toFixed(1)}초에서 멈춤: ${obs.ended}`);
+    // 보스 출현 시각: 중간 보스 2:00, 두 번째 보스 3:00, 최종 보스 5:00(프레임 한 번 이내 오차)
     assert.ok(obs.bossAppeared.miniBoss >= TIMELINE.midBossAt && obs.bossAppeared.miniBoss < TIMELINE.midBossAt + 0.2, String(obs.bossAppeared.miniBoss));
+    assert.ok(obs.bossAppeared.secondBoss >= TIMELINE.secondBossAt && obs.bossAppeared.secondBoss < TIMELINE.secondBossAt + 0.2, String(obs.bossAppeared.secondBoss));
     assert.ok(obs.bossAppeared.finalBoss >= TIMELINE.finalBossAt && obs.bossAppeared.finalBoss < TIMELINE.finalBossAt + 0.2, String(obs.bossAppeared.finalBoss));
-    // 일반 적 수 상한(+보스 2마리)
-    assert.ok(obs.maxEnemies <= SPAWN.maxEnemies + 2, `동시 적 수 ${obs.maxEnemies}`);
+    // 일반 적 수 상한(+보스 3마리)
+    assert.ok(obs.maxEnemies <= SPAWN.maxEnemies + 3, `동시 적 수 ${obs.maxEnemies}`);
     // 보상 화면이 열려 있는 동안 시간과 적이 멈춰 있었다
     assert.equal(obs.timeDuringRewardViolations, 0);
     assert.equal(obs.levelupFrozenViolations, 0);
@@ -153,7 +154,8 @@ test('수직 슬라이스: 최종 보스가 살아 있으면 5:00을 지나 6:00
     assert.ok(g.gameTime() >= 360);
     const boss = g.enemies.find((e) => e.kind === 'finalBoss');
     assert.ok(boss, '최종 보스가 사라졌다');
-    assert.ok(g.enemies.length > 1, '5:00 이후 기존 적이 모두 사라졌다');
+    assert.ok(obs.normalAtFinalBoss > 0, '5:00에 남아 있던 일반 적이 없다'); // 신규 생성은 5:00부터 멈추지만 그 시점의 기존 적은 있었다
+    assert.ok(boss.hp > 0 && !boss.dead, '최종 보스가 살아 있지 않다');
   } finally {
     obs.h.dispose();
   }
@@ -218,5 +220,5 @@ test('성능(순수 로직만, 화면 없음): 적 100마리 이동/밀어내기
     experience.collect(player);
   }
   assert.ok((nodePerformance.now() - t1) / 2000 < 2);
-  assert.equal(BOSS.finalBoss.maxHp, 400);
+  assert.equal(BOSS.finalBoss.maxHp, 800);
 });

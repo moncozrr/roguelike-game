@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 
 test('프로덕션 빌드에는 개발 전용 키(X, G), 개발 HUD, 테스트용 개발 핸들이 포함되지 않고, 보상 선택 키는 포함된다', () => {
-  const outDir = mkdtempSync(join(tmpdir(), 'nine-borders-prod-'));
+  const outDir = mkdtempSync(join(tmpdir(), 'ninefold-veil-prod-'));
   try {
     const build = spawnSync(process.execPath, [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--outDir', outDir, '--emptyOutDir'], {
       cwd: root,
@@ -31,7 +31,7 @@ test('프로덕션 빌드에는 개발 전용 키(X, G), 개발 HUD, 테스트�
     assert.ok(!js.includes('KeyB'), '경계 내구도 개발 키(KeyB)가 프로덕션 번들에 있습니다');
     assert.ok(js.includes('KeyR'), '경계 회복 토글 키(R)는 프로덕션에도 있어야 합니다');
     assert.ok(!js.includes('+10xp'), '개발 HUD 문구가 프로덕션 번들에 있습니다');
-    assert.ok(!js.includes('__nineBorders'), '통합 테스트용 개발 핸들이 프로덕션 번들에 있습니다');
+    assert.ok(!js.includes('__ninefoldVeil'), '통합 테스트용 개발 핸들이 프로덕션 번들에 있습니다');
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

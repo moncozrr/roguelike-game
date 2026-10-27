@@ -1,6 +1,6 @@
 // game.js 통합 테스트: 실제 game.js를 실행하고, 실제 키 입력 경로와 프레임 루프로 상태 연결을 검증한다.
 // 브라우저 없이 Vite의 ssrLoadModule과 가짜 브라우저 객체로 동작한다(tests/helpers/gameHarness.js). 픽셀 렌더링은 검증하지 않는다.
-// 개발 모드 전용 핸들(window.__nineBorders)로 상태를 읽고, 시험 상황(낮은 HP, 근접한 적과 구슬 등)을 만든다.
+// 개발 모드 전용 핸들(window.__ninefoldVeil)로 상태를 읽고, 시험 상황(낮은 HP, 근접한 적과 구슬 등)을 만든다.
 // 실행: npm test
 
 import test, { before, after } from 'node:test';

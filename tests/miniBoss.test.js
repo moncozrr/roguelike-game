@@ -5,7 +5,8 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadGame, launchGame } from './helpers/gameHarness.js';
 import { BOSS, ENEMY, BOUNDARY, TIMELINE, WORLD } from '../src/config.js';
-import { createMiniBoss, isMiniBoss, miniBossSpawnPosition } from '../src/boss.js';
+import { createMiniBoss, isMiniBoss, bossSpawnPosition } from '../src/boss.js';
+import { computeCamera, viewRect } from '../src/camera.js';
 import { createEnemy, damageEnemy, removeDeadEnemies } from '../src/enemy.js';
 import { createWeaponSystem } from '../src/weapons.js';
 import { createExperience } from '../src/experience.js';
@@ -42,16 +43,66 @@ test('보스 만들기: 별도 HP/속도, isBoss 표시, 일반 적 설정은 �
   assert.equal(normal.isBoss, undefined);
 });
 
-test('보스 출현 위치: 화면 밖 고리 위이고 월드 안이다', () => {
+// 월드 좌표 점이 실제 화면(카메라가 월드 가장자리에서 멈춘 경우 포함) 안에 들어와 보이는지. pad는 보스 그림 절반.
+const PAD = (ENEMY.displaySize * BOSS.sizeScale) / 2;
+function visible(player, view, p) {
+  const rect = viewRect(computeCamera(player, view, WORLD), view);
+  return p.x >= rect.left - PAD && p.x <= rect.right + PAD && p.y >= rect.top - PAD && p.y <= rect.bottom + PAD;
+}
+
+test('보스 출현 위치: 플레이어에게서 BOSS.spawnDistance(800px) 떨어진 화면 밖 월드 안이다', () => {
+  assert.equal(BOSS.spawnDistance, 800);
   const view = { width: 800, height: 600 };
-  for (const r of [0, 0.25, 0.5, 0.9]) {
-    const p = miniBossSpawnPosition(PLAYER, view, () => r);
+  for (let r = 0; r < 1; r += 0.05) {
+    const p = bossSpawnPosition(PLAYER, view, () => r);
     const d = Math.hypot(p.x - PLAYER.x, p.y - PLAYER.y);
-    assert.ok(d >= Math.min(view.width, view.height) / 2, `화면 안에 생김 d=${d}`);
+    assert.ok(Math.abs(d - BOSS.spawnDistance) < 1e-6, `거리 ${d}`);
+    assert.equal(visible(PLAYER, view, p), false, '출현하는 순간 화면에 보인다');
     assert.ok(p.x >= 0 && p.x <= WORLD.width && p.y >= 0 && p.y <= WORLD.height);
   }
-  const corner = miniBossSpawnPosition({ x: 10, y: 10 }, view, () => 0.5); // 월드 모서리에서도 월드 안
-  assert.ok(corner.x >= 0 && corner.y >= 0);
+});
+
+test('보스 출현 위치: 월드 가장자리/모서리에서도 화면 밖, 월드 안, 플레이어와 800px 거리다(방향이 월드 밖을 향해도 다른 방향을 찾는다)', () => {
+  const view = { width: 800, height: 600 };
+  const spots = [{ x: 10, y: 10 }, { x: WORLD.width - 10, y: WORLD.height - 10 }, { x: 10, y: WORLD.height / 2 }, { x: WORLD.width / 2, y: 10 }];
+  for (const spot of spots) {
+    for (let r = 0; r < 1; r += 0.05) {
+      const p = bossSpawnPosition(spot, view, () => r);
+      const d = Math.hypot(p.x - spot.x, p.y - spot.y);
+      assert.ok(Math.abs(d - BOSS.spawnDistance) < 1, `플레이어 (${spot.x}, ${spot.y}) r=${r.toFixed(2)}: 거리 ${d}`);
+      assert.equal(visible(spot, view, p), false, `플레이어 (${spot.x}, ${spot.y}) r=${r.toFixed(2)}: 화면에 보인다`);
+      assert.ok(p.x >= 0 && p.x <= WORLD.width && p.y >= 0 && p.y <= WORLD.height);
+    }
+  }
+});
+
+test('보스 출현 위치: 화면이 아주 커도 화면 안에 생기지 않는다(거리는 화면 크기에 맞춰 늘어난다)', () => {
+  const view = { width: 1800, height: 1200 }; // 대각선 절반 약 1082px > 800px
+  for (let r = 0; r < 1; r += 0.1) {
+    const p = bossSpawnPosition(PLAYER, view, () => r);
+    assert.equal(visible(PLAYER, view, p), false);
+  }
+});
+
+test('보스 속도 80으로 출현 후 5초 안에 화면에 들어온다(화면 1200x800 기준, 모든 방향)', () => {
+  const view = { width: 1200, height: 800 };
+  const speed = BOSS.miniBoss.speed;
+  assert.equal(speed, 80);
+  let worst = 0;
+  for (let r = 0; r < 1; r += 0.02) {
+    const boss = { ...bossSpawnPosition(PLAYER, view, () => r) };
+    let t = 0;
+    while (!visible(PLAYER, view, boss) && t < 20) {
+      const dx = PLAYER.x - boss.x;
+      const dy = PLAYER.y - boss.y;
+      const len = Math.hypot(dx, dy);
+      boss.x += (dx / len) * speed * 0.05;
+      boss.y += (dy / len) * speed * 0.05;
+      t += 0.05;
+    }
+    worst = Math.max(worst, t);
+  }
+  assert.ok(worst <= 5, `가장 늦게 보인 경우 ${worst.toFixed(2)}초`);
 });
 
 test('보스는 일반 피해 규칙으로 다치고 죽으며 목록에서 한 번만 제거된다', () => {

@@ -1,7 +1,7 @@
 # Project Rules
 
 ## Project
-- Project name: 아홉 경계 (Nine Borders).
+- Project name: 아홉 경계 (The Ninefold Veil).
 - This is a 2D roguelike browser game built with JavaScript, HTML, CSS, and Vite.
 - Explain technical concepts in beginner-friendly language when appropriate.
 
@@ -31,3 +31,18 @@
 ## Verification
 - Run the relevant build or tests after code changes when appropriate.
 - Clearly distinguish verified results from assumptions or untested behavior.
+
+## Workflow and Tool Responsibilities
+- Before making substantial changes, read `AI_WORKFLOW_AND_TOOL_RESPONSIBILITIES.md` and follow its workflow and tool responsibilities.
+- ChatGPT: leads game design, worldbuilding, narrative, gameplay systems, planning, and design review.
+- Higgsfield: produces visual assets only after the estimated credit cost is checked and the user explicitly approves generation.
+- Codex: assists with technical planning, architecture review, code review, and independent verification.
+- Claude Code: primary implementation and debugging agent.
+
+## Design and Change Control
+- Treat approved specifications and explicit user decisions as authoritative.
+- Clarify requirements before substantial implementation.
+- Do not silently change established mechanics, narrative canon, or art direction.
+- Avoid concurrent edits to the same files by multiple agents.
+- Before risky changes, recommend a version-control checkpoint (commit) and ask the user first; do not commit unless the user explicitly asks (see Code Safety).
+- Keep project documentation consistent with confirmed decisions and implemented features.

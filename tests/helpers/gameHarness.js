@@ -150,7 +150,7 @@ export function launchGame(startGame, { seed = 1, width = 800, height = 600, lef
   const harness = {
     ctx,
     get game() {
-      return window.__nineBorders;
+      return window.__ninefoldVeil;
     },
     get texts() {
       return ctx.texts;

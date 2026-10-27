@@ -14,7 +14,7 @@ import { createEnemyProjectileSystem } from './enemyProjectiles.js';
 import { createExperience } from './experience.js';
 import { createLevelUpFlow } from './rewards.js';
 import { createBoundaryUpgradeFlow } from './boundaryRewards.js';
-import { createMiniBoss, createFinalBoss, miniBossSpawnPosition, isMiniBoss, isFinalBoss } from './boss.js';
+import { createMiniBoss, createSecondBoss, createFinalBoss, bossSpawnPosition, isMiniBoss, isFinalBoss } from './boss.js';
 import { computeCardLayout, hitTestCards, keyToCardIndex, pointerToCanvas } from './rewardCards.js';
 import { drawRewardCards } from './rewardCardsView.js';
 import { createPlayerHealth, anyContact } from './combat.js';
@@ -36,8 +36,8 @@ const DEBUG_DASH = false; // true면 개발용으로 대시 이동 거리를 콘
 // 시간 이벤트가 발동했을 때 화면에 보여 줄 알림(단계 1에서는 보스 전투 없이 알림만 표시)
 const EVENT_MESSAGES = {
   midBoss: '중간 보스 출현 (테스트)',
+  secondBoss: '두 번째 보스 출현 (테스트)',
   finalBoss: '최종 보스 출현 (테스트)',
-  target: '5:00 도달 (런은 계속됩니다)',
 };
 
 // 개발용 테스트 기능: 개발 모드(npm run dev)에서만 켜지고, 프로덕션 빌드에서는 코드째 제거된다.
@@ -89,8 +89,8 @@ export function startGame(canvas) {
   const state = createGameState(); // ready -> playing <-> paused, playing -> gameover
   const timeline = createTimeline([
     { id: 'midBoss', at: TIMELINE.midBossAt },
+    { id: 'secondBoss', at: TIMELINE.secondBossAt },
     { id: 'finalBoss', at: TIMELINE.finalBossAt },
-    { id: 'target', at: TIMELINE.targetTime },
   ]);
   let gameTime = devOptions.startTime; // 게임 시간(초). update에서만 증가하므로 정지 중에는 멈춘다.
   let notice = null; // 화면에 잠시 보여 줄 이벤트 알림 { text, remaining }
@@ -138,11 +138,11 @@ export function startGame(canvas) {
   // 제거되는 적마다 경험치 구슬을 한 개 만든다(한 적에게서는 한 번만).
   function updateWeaponSystem(dt) {
     // 경계 안에 있는 동안 공격력 버프(내구도에 따라 약해짐)가 발동하는 공격에 적용된다.
-    weapons.update(dt, player, enemies, attackMultiplier(boundary, player, 'player'));
+    weapons.update(dt, player, enemies, attackMultiplier(boundary, player, 'player'), boundary.contains(player));
     removeDeadEnemies(enemies, (enemy) => {
       experience.spawnOrbFor(enemy);
-      // 중간 보스가 죽어서 목록에서 제거되는 순간 한 번만 경계 강화 화면을 예약한다(일반 적은 해당 없음).
       if (isFinalBoss(enemy)) finalBossDefeated = true; // 승리 처리는 프레임 끝에서 한 번만(플레이어 사망이 같은 프레임이면 게임 오버가 우선)
+      // 중간 보스가 죽어서 목록에서 제거되는 순간 한 번만 경계 강화 화면을 예약한다(일반 적은 해당 없음).
       if (isMiniBoss(enemy) && !enemy.bossRewardGiven) {
         enemy.bossRewardGiven = true;
         boundaryUpgrades.addUpgrades(1);
@@ -178,7 +178,11 @@ export function startGame(canvas) {
     const screen = currentReward();
     if (!screen) return;
     const cards = screen.flow.candidates;
-    if (!screen.flow.select(index)) return;
+    if (!screen.flow.select(index)) {
+      // 잘못된 번호면 화면이 그대로 남아 있어 할 일이 없다. 적용에 실패했다면 후보는 이미 비워졌으므로, 열 화면이 더 없을 때 전투를 재개해 멈춤을 막는다.
+      if (!currentReward() && !(boundaryUpgrades.advance() || levelUp.advance())) state.send('rewardDone');
+      return;
+    }
     rewardFlash = { cards, index, title: screen.title, remaining: REWARD_FLASH_DURATION };
   }
 
@@ -235,15 +239,21 @@ export function startGame(canvas) {
 
   // 중간 보스를 화면 밖 고리 위에 만든다. 일반 적과 같은 목록에 들어가 같은 이동/피해/제거 규칙을 따른다.
   function spawnMiniBoss() {
-    const p = miniBossSpawnPosition(player, size);
+    const p = bossSpawnPosition(player, size);
     enemies.push(createMiniBoss(nextEnemyId++, p.x, p.y, player));
   }
 
-  // 최종 보스를 만든다(중간 보스가 살아 있든 죽었든 상관없이 3:00에 한 번). 이미 나왔으면 아무것도 하지 않는다.
+  // 두 번째 보스를 만든다(3:00). 처치해도 런은 끝나지 않고 보상도 없다. 타임라인이 런마다 한 번만 발동하므로 한 번만 나온다.
+  function spawnSecondBoss() {
+    const p = bossSpawnPosition(player, size);
+    enemies.push(createSecondBoss(nextEnemyId++, p.x, p.y, player));
+  }
+
+  // 최종 보스를 만든다(다른 보스의 생존 여부와 상관없이 5:00에 한 번). 이미 나왔으면 아무것도 하지 않는다.
   function spawnFinalBoss() {
     if (finalBossSpawned) return;
     finalBossSpawned = true;
-    const p = miniBossSpawnPosition(player, size, Math.random, { margin: BOSS.finalBoss.spawnMargin });
+    const p = bossSpawnPosition(player, size);
     enemies.push(createFinalBoss(nextEnemyId++, p.x, p.y, player));
   }
 
@@ -379,6 +389,7 @@ export function startGame(canvas) {
     for (const event of timeline.update(gameTime)) {
       notice = { text: EVENT_MESSAGES[event.id], remaining: NOTICE_DURATION };
       if (event.id === 'finalBoss') spawnFinalBoss();
+      if (event.id === 'secondBoss') spawnSecondBoss();
       if (event.id === 'midBoss') spawnMiniBoss(); // 타임라인은 이벤트를 런마다 한 번만 발동하므로 보스도 한 번만 나온다.
       if (import.meta.env.DEV) console.log(`[timeline] ${event.id} @ ${formatTime(gameTime)}`);
     }
@@ -1042,7 +1053,7 @@ export function startGame(canvas) {
   if (import.meta.env.DEV) {
     // [개발 모드 전용] 자동 통합 테스트(tests/gameIntegration.test.js)가 게임 상태를 읽고 시험 상황을 만들기 위한 핸들.
     // 프로덕션 빌드에서는 코드째 제거된다(tests/prodBuild.test.js가 확인).
-    window.__nineBorders = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime, boundary: () => boundary, boundaryUpgrades: () => boundaryUpgrades };
+    window.__ninefoldVeil = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime, boundary: () => boundary, boundaryUpgrades: () => boundaryUpgrades };
   }
 
   new ResizeObserver(resize).observe(canvas);

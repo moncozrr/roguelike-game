@@ -3,7 +3,7 @@
 // 시간이 흐르는 곳은 update(dt)뿐이므로, 게임이 정지 중일 때 update를 부르지 않으면 쿨다운과 투사체도 멈춘다.
 // 적은 enemy.js의 damageEnemy로만 다친다. 죽은 적을 목록에서 빼는 일은 게임 쪽이 한다(removeDeadEnemies).
 
-import { WEAPONS, WEAPON_RULES, STARTING_WEAPONS, WORLD, ENEMY } from './config.js';
+import { WEAPONS, WEAPON_RULES, STARTING_WEAPONS, WORLD, ENEMY, BOUNDARY } from './config.js';
 import { enemyRadius, damageEnemy, findNearestEnemy } from './enemy.js';
 import { strikeChain, createBoomerang, stepBoomerang } from './weaponAttacks.js';
 
@@ -38,6 +38,7 @@ export function createWeaponSystem({
   startingWeapons = STARTING_WEAPONS,
   world = WORLD,
   enemyConfig = ENEMY,
+  boundaryRules = BOUNDARY,
 } = {}) {
   const hitRadius = enemyRadius(enemyConfig); // 적 충돌 반지름(표시 크기와 별개)
   let slots = []; // 보유 무기: { id, level, cooldown }
@@ -55,7 +56,8 @@ export function createWeaponSystem({
     return true;
   }
 
-  function fireProjectile(def, damage, id, player, target) {
+  // angle: 조준 방향에서 벌릴 각도(라디안). 투사체가 여러 개일 때 겹치지 않게 부채꼴로 쏜다.
+  function fireProjectile(def, damage, id, player, target, angle = 0) {
     let dx = target.x - player.x;
     let dy = target.y - player.y;
     const len = Math.hypot(dx, dy);
@@ -65,6 +67,11 @@ export function createWeaponSystem({
     } else {
       dx = 1; // 완전히 겹쳐 있으면 오른쪽으로(방향이 정해지지 않는 경우 대비)
       dy = 0;
+    }
+    if (angle !== 0) {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      [dx, dy] = [dx * cos - dy * sin, dx * sin + dy * cos];
     }
     projectiles.push({
       x: player.x,
@@ -81,15 +88,15 @@ export function createWeaponSystem({
   }
 
   // 범위 안의 살아 있는 모든 적을 한 번씩 때린다(적마다 피해는 한 번).
-  function strikeArea(def, damage, id, player, enemies) {
-    const rangeSq = def.range * def.range;
+  function strikeArea(def, damage, id, player, enemies, range = def.range) {
+    const rangeSq = range * range;
     for (const e of enemies) {
       if (e.dead) continue;
       const dx = e.x - player.x;
       const dy = e.y - player.y;
       if (dx * dx + dy * dy <= rangeSq) damageEnemy(e, damage);
     }
-    effects.push({ weaponId: id, radius: def.range, age: 0, duration: def.flashDuration });
+    effects.push({ weaponId: id, radius: range, age: 0, duration: def.flashDuration });
   }
 
   // 한 투사체를 dt만큼 움직이고 적에 맞았는지 본다. 이번 이동 선분과 겹치는 적 중 가장 먼저 닿는 적 하나만 맞힌다.
@@ -164,22 +171,27 @@ export function createWeaponSystem({
     // dt초 동안 진행한다. player: {x, y}, enemies: 적 목록(살아 있는 적만 대상이 된다).
     // 쿨다운이 끝난 무기는 사거리 안에 적이 있을 때 자동으로 발동한다. 대상이 없으면 쿨다운은 0에서 기다린다.
     // damageScale: 발동 순간의 피해 배율(경계 버프 등, 기본 1). 이미 날아가는 투사체의 피해는 바뀌지 않는다.
-    update(dt, player, enemies, damageScale = 1) {
+    // inBoundary: 플레이어가 경계 안인지. 경계 안이면 원거리 투사체 수와 근접 범위가 늘어난다(BOUNDARY 값).
+    update(dt, player, enemies, damageScale = 1, inBoundary = false) {
       const scale = Number.isFinite(damageScale) && damageScale > 0 ? damageScale : 1;
       const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
       for (const w of slots) {
         w.cooldown = Math.max(0, w.cooldown - step);
         if (w.cooldown > 0) continue;
         const def = defs[w.id];
-        const target = findNearestEnemy(enemies, player, def.range);
+        const range = def.range * (inBoundary && def.type === 'area' ? boundaryRules.meleeRangeMultiplier : 1);
+        const target = findNearestEnemy(enemies, player, range);
         if (!target) continue;
         const damage = weaponDamage(def, w.level, rules) * scale;
-        if (def.type === 'projectile') fireProjectile(def, damage, w.id, player, target);
+        if (def.type === 'projectile') {
+          const count = inBoundary ? boundaryRules.projectileCountMultiplier : 1;
+          for (let i = 0; i < count; i++) fireProjectile(def, damage, w.id, player, target, (i - (count - 1) / 2) * boundaryRules.projectileSpreadAngle);
+        }
         else if (def.type === 'boomerang') boomerangs.push(createBoomerang(def, damage, player, target));
         else if (def.type === 'chain') {
           const points = strikeChain(def, damage, player, enemies);
           if (points) effects.push({ weaponId: w.id, points, age: 0, duration: def.flashDuration });
-        } else strikeArea(def, damage, w.id, player, enemies);
+        } else strikeArea(def, damage, w.id, player, enemies, range);
         w.cooldown = def.cooldown;
       }
       projectiles = projectiles.filter((p) => stepProjectile(p, step, enemies));

@@ -1,11 +1,11 @@
-// 단계 12: 최종 보스(3:00 출현), 승리/게임 오버 상태, 5:00 이후 계속 진행.
+// 단계 12: 최종 보스(5:00 출현, 처치하면 승리), 두 번째 보스(3:00 출현, 처치해도 런은 계속), 승리/게임 오버 상태, 5:00 이후 계속 진행.
 // 순수 로직(boss.js, 상태 기계)과 실제 game.js 통합 테스트를 함께 둔다. 실행: npm test
 
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadGame, launchGame } from './helpers/gameHarness.js';
 import { BOSS, ENEMY, PLAYER_HEALTH, SPAWN, TIMELINE } from '../src/config.js';
-import { createFinalBoss, createMiniBoss, isFinalBoss, isMiniBoss } from '../src/boss.js';
+import { createFinalBoss, createMiniBoss, createSecondBoss, isFinalBoss, isMiniBoss, isSecondBoss } from '../src/boss.js';
 import { createGameState, STATES } from '../src/gameState.js';
 
 let loaded;
@@ -20,12 +20,30 @@ const PLAYER = { x: 2000, y: 2000 };
 
 // ---------- 순수 로직 ----------
 
-test('최종 보스 설정: 승인된 임시값(HP 400, 속도 60)이 따로 분리되어 있고 중간 보스와 구분된다', () => {
-  assert.equal(TIMELINE.finalBossAt, 180);
-  assert.equal(BOSS.finalBoss.maxHp, 400);
-  assert.equal(BOSS.finalBoss.speed, 60);
+test('보스 설정: 최종 보스(5:00, HP 800, 속도 80)와 두 번째 보스(3:00, HP 400, 속도 80)가 중간 보스와 따로 분리되어 있다', () => {
+  assert.equal(TIMELINE.midBossAt, 120);
+  assert.equal(TIMELINE.secondBossAt, 180);
+  assert.equal(TIMELINE.finalBossAt, 300);
+  assert.equal(BOSS.finalBoss.maxHp, 800);
+  assert.equal(BOSS.finalBoss.speed, 80);
+  assert.equal(BOSS.secondBoss.maxHp, 400);
+  assert.equal(BOSS.secondBoss.speed, 80);
   assert.notEqual(BOSS.finalBoss, BOSS.miniBoss);
-  assert.equal(BOSS.miniBoss.maxHp, 200); // 중간 보스 설정은 그대로
+  assert.notEqual(BOSS.finalBoss, BOSS.secondBoss);
+  assert.equal(BOSS.miniBoss.maxHp, 200); // 중간 보스 HP는 그대로
+  assert.equal(BOSS.miniBoss.speed, 80);
+});
+
+test('두 번째 보스 만들기: 설정의 HP/속도, isBoss 표시, 다른 보스와 다른 종류', () => {
+  const boss = createSecondBoss(5, 10, 10, PLAYER);
+  assert.equal(boss.kind, 'secondBoss');
+  assert.equal(isSecondBoss(boss), true);
+  assert.equal(isFinalBoss(boss), false);
+  assert.equal(isMiniBoss(boss), false);
+  assert.equal(boss.isBoss, true);
+  assert.equal(boss.hp, BOSS.secondBoss.maxHp);
+  assert.equal(boss.speed, BOSS.secondBoss.speed);
+  assert.equal(isSecondBoss(createFinalBoss(1, 0, 0, PLAYER)), false);
 });
 
 test('최종 보스 만들기: 설정의 HP/속도, isBoss 표시, 중간 보스/일반 적과 다른 종류', () => {
@@ -38,6 +56,7 @@ test('최종 보스 만들기: 설정의 HP/속도, isBoss 표시, 중간 보스
   assert.equal(boss.maxHp, BOSS.finalBoss.maxHp);
   assert.equal(boss.speed, BOSS.finalBoss.speed);
   assert.equal(isFinalBoss(createMiniBoss(1, 0, 0, PLAYER)), false);
+  assert.equal(isFinalBoss(createSecondBoss(1, 0, 0, PLAYER)), false);
   const custom = createFinalBoss(6, 0, 0, PLAYER, { maxHp: 77, speed: 5 }); // 설정만 바꾸면 값이 따라온다
   assert.equal(custom.hp, 77);
   assert.equal(custom.speed, 5);
@@ -79,9 +98,10 @@ function startPlaying(seed = 1) {
 const bosses = (h) => h.game.enemies.filter((e) => e.isBoss);
 const finals = (h) => h.game.enemies.filter(isFinalBoss);
 const minis = (h) => h.game.enemies.filter(isMiniBoss);
+const secondBosses = (h) => h.game.enemies.filter(isSecondBoss);
 
 // 게임 시간을 목표까지 진행한다. 일반 적은 계속 치우고 HP는 채워서 플레이어가 죽지 않게 한다.
-//   miniBoss: 'far'면 중간 보스를 멀리 두어 살려 두고, 'remove'면 없앤다. 최종 보스는 건드리지 않는다.
+//   miniBoss: 'far'면 중간 보스와 두 번째 보스를 멀리 두어 살려 두고, 'remove'면 없앤다. 최종 보스는 건드리지 않는다.
 //   레벨업/보상 화면이 열리면 1번을 골라 계속한다.
 function advanceTo(h, seconds, { miniBoss = 'far', keepFinalAlive = false, clearNormal = true } = {}) {
   const g = h.game;
@@ -97,10 +117,10 @@ function advanceTo(h, seconds, { miniBoss = 'far', keepFinalAlive = false, clear
     g.health.reset();
     if (clearNormal) for (let i = g.enemies.length - 1; i >= 0; i--) if (!g.enemies[i].isBoss) g.enemies.splice(i, 1);
     g.experience.orbs.length = 0;
-    for (const m of minis(h)) {
+    for (const m of [...minis(h), ...secondBosses(h)]) {
       if (miniBoss === 'remove') g.enemies.splice(g.enemies.indexOf(m), 1);
       else {
-        m.x = g.player.x + 1500; // 중간 보스를 멀리 두어 살려 둔다
+        m.x = g.player.x + 1500; // 중간/두 번째 보스를 멀리 두어 살려 둔다
         m.y = g.player.y;
         m.hp = m.maxHp;
       }
@@ -139,23 +159,22 @@ const snapshot = (h) => {
   });
 };
 
-test('1. 3:00에 최종 보스가 정확히 한 번 나오고, 정지 중에는 당겨지거나 중복되지 않는다', () => {
+test('1. 5:00에 최종 보스가 정확히 한 번 나오고, 정지 중에는 당겨지거나 중복되지 않는다', () => {
   const h = startPlaying();
   try {
-    advanceTo(h, 119);
-    advanceTo(h, 177.5);
+    advanceTo(h, 297.5);
     assert.equal(finals(h).length, 0);
     h.tap('Escape');
     assert.equal(h.game.state.current, 'paused');
     h.run(30);
     assert.equal(finals(h).length, 0); // 정지 시간 동안은 출현하지 않는다
     h.tap('Escape');
-    advanceTo(h, 179.5);
+    advanceTo(h, 299.5);
     assert.equal(finals(h).length, 0);
-    advanceTo(h, 181);
+    advanceTo(h, 301);
     assert.equal(finals(h).length, 1);
     const id = finals(h)[0].id;
-    advanceTo(h, 200, { keepFinalAlive: true });
+    advanceTo(h, 320, { keepFinalAlive: true });
     assert.equal(finals(h).length, 1);
     assert.equal(finals(h)[0].id, id);
   } finally {
@@ -163,35 +182,70 @@ test('1. 3:00에 최종 보스가 정확히 한 번 나오고, 정지 중에는 
   }
 });
 
-test('2. 중간 보스가 살아 있어도, 이미 죽었어도 최종 보스는 3:00에 똑같이 나온다', () => {
+test('2. 중간 보스/두 번째 보스가 살아 있어도, 이미 죽었어도 최종 보스는 5:00에 똑같이 나온다', () => {
   for (const miniBoss of ['far', 'remove']) {
     const h = startPlaying();
     try {
       advanceTo(h, 121, { miniBoss });
       assert.equal(minis(h).length, miniBoss === 'far' ? 1 : 0);
-      advanceTo(h, 179.5, { miniBoss });
+      advanceTo(h, 299.5, { miniBoss });
       assert.equal(finals(h).length, 0);
-      advanceTo(h, 181, { miniBoss });
+      advanceTo(h, 301, { miniBoss });
       assert.equal(finals(h).length, 1, `중간 보스 ${miniBoss}`);
-      assert.equal(minis(h).length, miniBoss === 'far' ? 1 : 0); // 중간 보스 상태에 영향 없음
+      assert.equal(minis(h).length, miniBoss === 'far' ? 1 : 0); // 다른 보스 상태에 영향 없음
+      assert.equal(secondBosses(h).length, miniBoss === 'far' ? 1 : 0);
     } finally {
       h.dispose();
     }
   }
 });
 
-test('3. 최종 보스의 HP/속도는 설정에서 오고(HP 400, 속도 60), 중간 보스와 같은 규칙으로 움직인다', () => {
+test('3. 최종 보스의 HP/속도는 설정에서 오고(HP 800, 속도 80), 중간 보스와 같은 규칙으로 움직인다', () => {
   const h = startPlaying();
   try {
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     const boss = finals(h)[0];
     assert.equal(boss.maxHp, BOSS.finalBoss.maxHp);
     assert.equal(boss.speed, BOSS.finalBoss.speed);
     const before = Math.hypot(boss.x - h.game.player.x, boss.y - h.game.player.y);
-    advanceTo(h, 183, { miniBoss: 'remove', keepFinalAlive: true });
+    advanceTo(h, 303, { miniBoss: 'remove', keepFinalAlive: true });
     const after = Math.hypot(boss.x - h.game.player.x, boss.y - h.game.player.y);
     assert.ok(after < before, '보스가 플레이어 쪽으로 다가오지 않는다');
     assert.equal(boss.isBoss, true);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('두 번째 보스: 3:00에 정확히 한 번 나오고, 처치해도 승리하지 않으며 런과 최종 보스 출현은 그대로 이어진다', () => {
+  const h = startPlaying();
+  try {
+    const g = h.game;
+    advanceTo(h, 179.5, { miniBoss: 'far' });
+    assert.equal(secondBosses(h).length, 0);
+    advanceTo(h, 181, { miniBoss: 'far' });
+    assert.equal(secondBosses(h).length, 1);
+    assert.equal(finals(h).length, 0); // 3:00에는 최종 보스가 아니다
+    const second = secondBosses(h)[0];
+    advanceTo(h, 200, { miniBoss: 'far' });
+    assert.equal(secondBosses(h).length, 1); // 중복 출현 없음
+    // 두 번째 보스를 처치한다: 승리가 아니라 계속 진행
+    g.weapons.equip('pulse');
+    g.weapons.slots.forEach((w) => (w.cooldown = 0));
+    second.x = g.player.x + 30;
+    second.y = g.player.y;
+    second.hp = 1;
+    h.step();
+    assert.equal(second.dead, true);
+    assert.equal(g.enemies.includes(second), false);
+    assert.equal(g.state.current, 'playing'); // 승리하지 않는다
+    assert.equal(g.levelUp.active || g.boundaryUpgrades().active, false); // 보상 화면도 없다
+    h.run(3);
+    assert.equal(g.state.current, 'playing');
+    advanceTo(h, 299.5, { miniBoss: 'remove' });
+    assert.equal(finals(h).length, 0);
+    advanceTo(h, 301, { miniBoss: 'remove' });
+    assert.equal(finals(h).length, 1); // 최종 보스는 예정대로 5:00에 나온다
   } finally {
     h.dispose();
   }
@@ -201,7 +255,7 @@ test('4. 최종 보스를 처치하면 즉시 승리가 되고, 화면에 승리
   const h = startPlaying();
   try {
     const g = h.game;
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     const boss = armFinalBossKill(h);
     h.step(); // 같은 프레임 안에서 처치와 승리 전환
     assert.equal(boss.dead, true);
@@ -209,7 +263,7 @@ test('4. 최종 보스를 처치하면 즉시 승리가 되고, 화면에 승리
     assert.equal(g.enemies.includes(boss), false);
     h.step();
     assert.ok(h.texts.includes('승리'), h.texts.join('|'));
-    assert.ok(h.texts.some((t) => t.startsWith('생존 시간 3:0')), h.texts.join('|'));
+    assert.ok(h.texts.some((t) => t.startsWith('생존 시간 5:0')), h.texts.join('|'));
     assert.ok(h.texts.some((t) => t.includes('Enter')));
     assert.ok(!h.texts.includes('게임 오버'));
   } finally {
@@ -221,7 +275,7 @@ test('승리 뒤에는 모든 진행이 멈춘다: 시간, 적 생성/이동, �
   const h = startPlaying();
   try {
     const g = h.game;
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     // 승리 직전에 움직이는 것들이 있는 상태를 만든다
     g.enemies.push({ id: 7001, x: g.player.x + 200, y: g.player.y, kind: 'melee', facing: 'right', hp: 10, maxHp: 10, dead: false });
     g.enemies.push({ id: 7002, x: g.player.x + 250, y: g.player.y, kind: 'ranged', facing: 'right', hp: 10, maxHp: 10, dead: false, shotCooldown: 0.5 });
@@ -254,7 +308,7 @@ test('Enter로 새 런이 시작되고 모든 것이 초기화되며, 새 런에
   const h = startPlaying();
   try {
     const g = h.game;
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     g.boundary().damage(30);
     armFinalBossKill(h);
     h.step();
@@ -273,7 +327,7 @@ test('Enter로 새 런이 시작되고 모든 것이 초기화되며, 새 런에
     const t = g.gameTime();
     h.run(1);
     assert.ok(g.gameTime() > t); // 다시 진행된다
-    advanceTo(h, 181, { miniBoss: 'remove' }); // 새 런에서도 3:00에 최종 보스가 한 번 나온다
+    advanceTo(h, 301, { miniBoss: 'remove' }); // 새 런에서도 5:00에 최종 보스가 한 번 나온다
     assert.equal(finals(h).length, 1);
     assert.equal(g.state.current, 'playing'); // 이전 승리 기록이 새 런을 끝내지 않는다
     h.run(1);
@@ -309,7 +363,7 @@ test('같은 프레임에 플레이어 사망과 최종 보스 처치가 겹치�
   const h = startPlaying();
   try {
     const g = h.game;
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     const boss = armFinalBossKill(h);
     g.health.takeDamage(PLAYER_HEALTH.maxHp - 1);
     g.health.update(10); // 보호 해제
@@ -335,7 +389,7 @@ test('승리 프레임에 보류 중이던 보상(레벨업, 경계 강화)은 �
   const h = startPlaying();
   try {
     const g = h.game;
-    advanceTo(h, 181, { miniBoss: 'far' });
+    advanceTo(h, 301, { miniBoss: 'far' });
     const mini = minis(h)[0];
     mini.x = g.player.x + 40; // 중간 보스도 같은 프레임에 처치(경계 강화 예약)
     mini.y = g.player.y;
@@ -363,7 +417,7 @@ test('연속 레벨업 중에는 최종 보스가 죽지 않고, 보상을 모�
   const h = startPlaying();
   try {
     const g = h.game;
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     const boss = finals(h)[0];
     boss.x = g.player.x + 800; // 무기 사거리 밖(선택이 끝난 뒤에 가까이 데려와 처치한다)
     boss.y = g.player.y;
@@ -396,32 +450,31 @@ test('연속 레벨업 중에는 최종 보스가 죽지 않고, 보상을 모�
   }
 });
 
-test('6. 5:00이 되어도 런이 끝나지 않고, 최종 보스와 기존 적은 계속 움직이며, 일반 적 생성만 멈춘다', () => {
+test('6. 5:00에 나온 최종 보스를 잡지 못해도 런이 끝나지 않고, 보스와 기존 적은 계속 움직이며, 일반 적 생성은 5:00부터 멈춘다', () => {
   const h = startPlaying();
   try {
     const g = h.game;
-    assert.equal(TIMELINE.targetTime, 300);
+    assert.equal(TIMELINE.finalBossAt, 300);
     assert.equal(SPAWN.stopAtTime, 300);
-    advanceTo(h, 181, { miniBoss: 'remove' });
+    advanceTo(h, 301, { miniBoss: 'remove' });
     const boss = finals(h)[0];
-    boss.x = g.player.x + 3000; // 멀리서 시작해서 5:00 이후에도 이동 거리를 볼 수 있게
+    boss.x = g.player.x + 3000; // 멀리서 시작해서 이동 거리를 볼 수 있게
     boss.y = g.player.y;
-    advanceTo(h, 299, { miniBoss: 'remove', keepFinalAlive: true });
-    advanceTo(h, 301, { miniBoss: 'remove', keepFinalAlive: true, clearNormal: false });
-    assert.equal(g.state.current, 'playing'); // 5:00 자동 종료 없음
+    advanceTo(h, 305, { miniBoss: 'remove', keepFinalAlive: true, clearNormal: false });
+    assert.equal(g.state.current, 'playing'); // 보스가 살아 있으면 자동 종료 없음
     assert.equal(g.gameTime() >= 300, true);
     assert.equal(finals(h).length, 1);
     // 5:00 이후: 새 일반 적이 생기지 않는다(번호는 계속 커지므로 최대 번호가 그대로여야 한다)
     const maxId = () => Math.max(0, ...g.enemies.map((e) => e.id));
-    const idAt300 = maxId();
-    boss.x = g.player.x + 600; // 5:00 이후의 이동을 보기 위해 멀리 둔다
+    const idAfter300 = maxId();
+    boss.x = g.player.x + 600;
     boss.y = g.player.y;
     const startDistance = Math.hypot(boss.x - g.player.x, boss.y - g.player.y);
-    advanceTo(h, 320, { miniBoss: 'remove', keepFinalAlive: true, clearNormal: false });
+    advanceTo(h, 330, { miniBoss: 'remove', keepFinalAlive: true, clearNormal: false });
     assert.equal(g.state.current, 'playing');
-    assert.ok(maxId() <= idAt300, '5:00 이후에 일반 적이 새로 생겼다'); // 새 적은 항상 더 큰 번호를 받는다
-    assert.ok(Math.hypot(boss.x - g.player.x, boss.y - g.player.y) < startDistance); // 최종 보스는 5:00 이후에도 계속 다가온다
-    // 5:00 이후에도 무기와 처치/승리는 정상 동작한다
+    assert.ok(maxId() <= idAfter300, '5:00 이후에 일반 적이 새로 생겼다'); // 새 적은 항상 더 큰 번호를 받는다
+    assert.ok(Math.hypot(boss.x - g.player.x, boss.y - g.player.y) < startDistance); // 최종 보스는 계속 다가온다
+    // 무기와 처치/승리는 정상 동작한다
     armFinalBossKill(h);
     h.step();
     assert.equal(g.state.current, 'victory');
