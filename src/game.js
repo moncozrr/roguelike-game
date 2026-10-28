@@ -2,7 +2,9 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
-import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE, BOUNDARY, BOSS } from './config.js';
+import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE, BOUNDARY, BOSS, PLAYER_HEALTH, MAGNET } from './config.js';
+import { monsterIdForEnemy } from './data/monsters.js';
+import { quantizeToEightDirections } from './touchInput.js';
 import { createGameState, STATES } from './gameState.js';
 import { createTimeline } from './timeline.js';
 import { computeCamera, viewRect } from './camera.js';
@@ -70,7 +72,26 @@ const KEY_DIRECTIONS = {
   ArrowRight: [1, 0],
 };
 
-export function startGame(canvas) {
+// options (모두 생략 가능, 생략하면 예전처럼 단독 게임으로 동작한다):
+//   autoStart  true면 Enter를 기다리지 않고 바로 새 런을 시작한다(로비에서 입장할 때).
+//   onRunEnd   런이 끝나면(게임 오버/승리) 결과와 함께 정확히 한 번 불린다. 주어지면 Enter 재시작은 막는다(재도전은 로비가 새 게임을 만든다).
+//   modifiers  영구 업그레이드 보정값: { maxHpBonus, attackMultiplier, moveSpeedMultiplier, magnetBonus, boundaryDurabilityMultiplier }
+//   dungeonId  결과에 그대로 실어 보내는 던전 번호표(전투 규칙에는 영향 없음)
+//   hudTop     true면 HP/경험치 바를 왼쪽 위에 그린다(터치 화면에서 조이스틱과 겹치지 않게)
+// 반환: { destroy, getResult, togglePause, abandon, setMoveVector, requestDash, state } — destroy()가 모든 리스너와 루프를 해제한다.
+export function startGame(canvas, options = {}) {
+  const { autoStart = false, onRunEnd = null, dungeonId = null, hudTop = false } = options;
+  const mods = { maxHpBonus: 0, attackMultiplier: 1, moveSpeedMultiplier: 1, magnetBonus: 0, boundaryDurabilityMultiplier: 1, ...options.modifiers };
+  const abort = new AbortController(); // 등록한 모든 이벤트 리스너를 destroy()에서 한 번에 해제하는 데 쓴다.
+  const listen = { signal: abort.signal };
+  let destroyed = false;
+  let rafId = 0;
+  let resizeObserver = null;
+  const boundaryOptions = { maxDurability: BOUNDARY.maxDurability * mods.boundaryDurabilityMultiplier };
+  const killCounts = { normal: 0, boss: 0, byMonster: {} }; // 이번 런의 처치 수(일반/보스 구분, 몬스터별)
+  let runEndReported = false;
+  const touchMove = { x: 0, y: 0 }; // 가상 조이스틱 값(길이 0~1). 키보드와 별개로 저장하고 읽을 때 합친다.
+
   const ctx = canvas.getContext('2d');
   const pressed = new Set();
   const size = { width: 0, height: 0 }; // 화면(캔버스) 크기. 플레이어 위치 계산에는 쓰지 않는다.
@@ -96,7 +117,7 @@ export function startGame(canvas) {
   let notice = null; // 화면에 잠시 보여 줄 이벤트 알림 { text, remaining }
 
   // 경계: 월드에 고정된 원. 중심은 플레이어가 시작한 위치이고 이후 플레이어를 따라다니지 않는다.
-  let boundary = createBoundary(startPosition);
+  let boundary = createBoundary(startPosition, boundaryOptions);
   let insideBoundary = boundary.contains(player); // 플레이어 중심이 경계 안(경계선 위 포함)인지
 
   // 플레이어가 움직인 뒤 경계 안/밖 상태를 다시 계산한다. 체력/버프 등 효과는 아직 없다(단계 5, 10).
@@ -112,13 +133,13 @@ export function startGame(canvas) {
   let pixelRatio = 1; // 화면 배율(devicePixelRatio). 도트 그림을 정수 픽셀에 맞춰 그릴 때 쓴다.
 
   // 플레이어 체력: HP, 피격 후 보호, 대시 무적(서로 독립). 판정 규칙은 combat.js에 있다.
-  const health = createPlayerHealth();
+  const health = createPlayerHealth({ config: { ...PLAYER_HEALTH, maxHp: PLAYER_HEALTH.maxHp + mods.maxHpBonus } });
 
   // 무기: 자동 공격(가장 가까운 살아 있는 적), 투사체, 근접 공격. 게임이 실행 중일 때만 갱신되므로 정지/게임 오버에서는 멈춘다.
   const weapons = createWeaponSystem();
 
   // 경험치 구슬/레벨/자석과 레벨업 보상 선택. 선택 화면(levelup 상태)이 열려 있는 동안은 게임이 갱신되지 않는다.
-  const experience = createExperience();
+  const experience = createExperience({ magnet: { ...MAGNET, basePickupRadius: MAGNET.basePickupRadius + mods.magnetBonus } });
   const levelUp = createLevelUpFlow({ weapons, experience });
   // 경계 강화: 중간 보스를 처치했을 때만 예약된다(일반 레벨업 후보와 섞이지 않는 별도 흐름). 경계가 새 런마다 다시 만들어지므로 흐름도 함께 다시 만든다.
   let boundaryUpgrades = createBoundaryUpgradeFlow({ boundary });
@@ -138,9 +159,12 @@ export function startGame(canvas) {
   // 제거되는 적마다 경험치 구슬을 한 개 만든다(한 적에게서는 한 번만).
   function updateWeaponSystem(dt) {
     // 경계 안에 있는 동안 공격력 버프(내구도에 따라 약해짐)가 발동하는 공격에 적용된다.
-    weapons.update(dt, player, enemies, attackMultiplier(boundary, player, 'player'), boundary.contains(player));
+    weapons.update(dt, player, enemies, attackMultiplier(boundary, player, 'player') * mods.attackMultiplier, boundary.contains(player));
     removeDeadEnemies(enemies, (enemy) => {
       experience.spawnOrbFor(enemy);
+      const monsterId = monsterIdForEnemy(enemy); // 처치 수: 일반/보스를 나눠 세고 몬스터별로도 센다(도감용)
+      killCounts[enemy.isBoss ? 'boss' : 'normal'] += 1;
+      killCounts.byMonster[monsterId] = (killCounts.byMonster[monsterId] ?? 0) + 1;
       if (isFinalBoss(enemy)) finalBossDefeated = true; // 승리 처리는 프레임 끝에서 한 번만(플레이어 사망이 같은 프레임이면 게임 오버가 우선)
       // 중간 보스가 죽어서 목록에서 제거되는 순간 한 번만 경계 강화 화면을 예약한다(일반 적은 해당 없음).
       if (isMiniBoss(enemy) && !enemy.bossRewardGiven) {
@@ -285,7 +309,11 @@ export function startGame(canvas) {
     player.x = startPosition.x;
     player.y = startPosition.y;
     clampPlayer();
-    boundary = createBoundary(player); // 새 런의 시작 위치에 경계를 고정(강화 레벨도 0으로 초기화)
+    killCounts.normal = 0;
+    killCounts.boss = 0;
+    killCounts.byMonster = {};
+    runEndReported = false;
+    boundary = createBoundary(player, boundaryOptions); // 새 런의 시작 위치에 경계를 고정(강화 레벨도 0으로 초기화)
     refreshBoundaryState();
     enemies.length = 0; // 이전 런의 적과 생성기 상태(타이머, 소수 이월값)를 모두 지운다.
     nextEnemyId = 1;
@@ -350,9 +378,14 @@ export function startGame(canvas) {
     return { x: dx / length, y: dy / length };
   }
 
+  // 키보드 방향이 있으면 그것을, 없으면 가상 조이스틱을 8방향으로 맞춘 값을 쓴다. 입력이 없으면 null.
+  function readMoveDirection() {
+    return readInputDirection() ?? quantizeToEightDirections(touchMove.x, touchMove.y);
+  }
+
   function startDash() {
     // 방향키가 없으면 마지막 이동 방향, 대시 중에는 이 방향이 고정된다.
-    const dir = readInputDirection() ?? lastDirection;
+    const dir = readMoveDirection() ?? lastDirection;
     dash.active = true;
     dash.remaining = DASH_DISTANCE;
     dash.dx = dir.x;
@@ -417,7 +450,7 @@ export function startGame(canvas) {
       return;
     }
 
-    const dir = readInputDirection();
+    const dir = readMoveDirection();
     if (!dir) {
       walkTime = 0; // 멈추면 걷기 첫 프레임에 고정(검증된 대기 프레임이 없어 임시 표시)
       return;
@@ -427,8 +460,8 @@ export function startGame(canvas) {
     if (dir.x !== 0) facingRight = dir.x > 0;
     lastDirection.x = dir.x;
     lastDirection.y = dir.y;
-    player.x += dir.x * PLAYER_SPEED * dt;
-    player.y += dir.y * PLAYER_SPEED * dt;
+    player.x += dir.x * PLAYER_SPEED * mods.moveSpeedMultiplier * dt;
+    player.y += dir.y * PLAYER_SPEED * mods.moveSpeedMultiplier * dt;
     clampPlayer();
   }
 
@@ -654,7 +687,7 @@ export function startGame(canvas) {
     const barW = 200;
     const barH = 14;
     const x = 16;
-    const y = size.height - 28 - barH; // 아래에 경험치 바가 들어갈 자리를 둔다
+    const y = hudTop ? 40 : size.height - 28 - barH; // 아래에 경험치 바가 들어갈 자리를 둔다(터치 화면은 왼쪽 아래를 조이스틱이 쓰므로 왼쪽 위로 옮긴다)
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.fillRect(x - 2, y - 2, barW + 4, barH + 4);
@@ -709,10 +742,10 @@ export function startGame(canvas) {
       return;
     } else if (state.is(STATES.VICTORY)) {
       title = '승리';
-      lines = [`생존 시간 ${formatTime(gameTime)}`, 'Enter를 눌러 새 런 시작'];
+      lines = [`생존 시간 ${formatTime(gameTime)}`, ...(onRunEnd ? [] : ['Enter를 눌러 새 런 시작'])];
     } else if (state.is(STATES.GAMEOVER)) {
       title = '게임 오버';
-      lines = [`생존 시간 ${formatTime(gameTime)}`, 'Enter를 눌러 다시 시작'];
+      lines = [`생존 시간 ${formatTime(gameTime)}`, ...(onRunEnd ? [] : ['Enter를 눌러 다시 시작'])];
     } else {
       return;
     }
@@ -938,7 +971,64 @@ export function startGame(canvas) {
     drawOverlay();
   }
 
+  // 런이 끝났는지(게임 오버/승리) 확인해서, onRunEnd가 있으면 결과와 함께 한 번만 알린다.
+  function reportRunEndIfNeeded() {
+    if (!onRunEnd || runEndReported) return;
+    if (!state.is(STATES.GAMEOVER) && !state.is(STATES.VICTORY)) return;
+    runEndReported = true;
+    onRunEnd(getResult());
+  }
+
+  // 로비가 런 종료를 관리하는 동안에는 게임 오버/승리 화면에서 Enter로 다시 시작하지 않는다(재도전은 로비가 새 게임을 만든다).
+  function runEndLocked() {
+    return onRunEnd !== null && (state.is(STATES.GAMEOVER) || state.is(STATES.VICTORY));
+  }
+
+  // 지금까지의 런 결과. 진행 중에 불러도 되며 그때 outcome은 'playing'이다.
+  function getResult() {
+    const outcome = state.is(STATES.VICTORY) ? 'victory' : state.is(STATES.GAMEOVER) ? 'gameover' : 'playing';
+    return {
+      outcome,
+      dungeonId,
+      survivalSeconds: Math.floor(gameTime),
+      normalKills: killCounts.normal,
+      bossKills: killCounts.boss,
+      kills: { ...killCounts.byMonster },
+    };
+  }
+
+  // 로비의 "포기" 버튼: 진행 중이거나 정지 중인 런을 지금 상태로 끝낸다(게임 오버와 같은 결과). 보상 선택 중에는 무시한다.
+  function abandon() {
+    if (state.is(STATES.PAUSED)) state.send('resume');
+    if (state.is(STATES.PLAYING)) state.send('gameOver');
+  }
+
+  // 가상 조이스틱 값(-1~1). 숫자가 아니면 0으로 본다. 정지/보상 화면에서는 update가 불리지 않아 움직이지 않는다.
+  function setMoveVector(x, y) {
+    touchMove.x = Number.isFinite(x) ? x : 0;
+    touchMove.y = Number.isFinite(y) ? y : 0;
+  }
+
+  // 터치 대시 버튼: 키보드 Space와 같은 요청 경로를 쓴다(쿨다운, 대시 중 무시 규칙은 update가 처리). 실행 중일 때만 받는다.
+  function requestDash() {
+    if (state.is(STATES.PLAYING)) dashRequested = true;
+  }
+
+  // 게임을 완전히 끝낸다: 루프를 멈추고 모든 이벤트 리스너를 해제한다. 여러 번 불러도 안전하다.
+  function destroy() {
+    if (destroyed) return;
+    destroyed = true;
+    abort.abort();
+    cancelAnimationFrame(rafId);
+    resizeObserver?.disconnect();
+    pressed.clear();
+    touchMove.x = 0;
+    touchMove.y = 0;
+    if (import.meta.env.DEV && window.__ninefoldVeil?.state === state) delete window.__ninefoldVeil;
+  }
+
   function frame(now) {
+    if (destroyed) return;
     // lastTime은 정지 중에도 매 프레임 갱신하므로, 재개 직후 첫 dt가 정지 시간만큼 커지지 않는다.
     const dt = Math.min((now - lastTime) / 1000, MAX_FRAME_TIME);
     lastTime = now;
@@ -955,8 +1045,9 @@ export function startGame(canvas) {
       if (state.is(STATES.PLAYING)) updateExperience(); // 마지막에 구슬 줍기. 게임 오버가 난 프레임에는 줍지 않는다.
       openRewardScreenIfNeeded(); // 이번 프레임에 예약된 보상(보스 처치 등) 화면. 같은 프레임의 레벨업과 순서대로 이어진다.
     }
+    reportRunEndIfNeeded();
     draw();
-    requestAnimationFrame(frame);
+    rafId = requestAnimationFrame(frame);
   }
 
   function togglePause() {
@@ -972,6 +1063,8 @@ export function startGame(canvas) {
   // 포커스가 돌아와도 자동으로 재개하지 않는다(Esc로만 재개).
   function pauseForFocusLoss() {
     pressed.clear();
+    touchMove.x = 0;
+    touchMove.y = 0;
     spaceHeld = false;
     dashRequested = false;
     state.send('pause');
@@ -988,6 +1081,7 @@ export function startGame(canvas) {
       if (e.repeat) return;
       // 일시 정지 중에는 재개. 그 외에는 ready 또는 gameover에서만 전환에 성공하고, 그때만 새 런을 초기화한다.
       if (state.is(STATES.PAUSED)) togglePause();
+      else if (runEndLocked()) return;
       else if (state.send('start')) resetRun();
       return;
     }
@@ -1033,16 +1127,16 @@ export function startGame(canvas) {
     if (!(e.code in KEY_DIRECTIONS)) return;
     e.preventDefault(); // 방향키로 페이지가 스크롤되지 않게
     pressed.add(e.code);
-  });
+  }, listen);
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space') spaceHeld = false;
     pressed.delete(e.code);
-  });
-  canvas.addEventListener('click', onCanvasClick);
-  window.addEventListener('blur', pauseForFocusLoss);
+  }, listen);
+  canvas.addEventListener('click', onCanvasClick, listen);
+  window.addEventListener('blur', pauseForFocusLoss, listen);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) pauseForFocusLoss();
-  });
+  }, listen);
 
   loadSprite().then((loaded) => {
     sprite = loaded;
@@ -1056,7 +1150,25 @@ export function startGame(canvas) {
     window.__ninefoldVeil = { state, player, enemies, weapons, enemyProjectiles, experience, levelUp, health, gameTime: () => gameTime, boundary: () => boundary, boundaryUpgrades: () => boundaryUpgrades };
   }
 
-  new ResizeObserver(resize).observe(canvas);
+  resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(canvas);
   resize();
-  requestAnimationFrame(frame);
+  if (autoStart && state.send('start')) resetRun();
+  rafId = requestAnimationFrame(frame);
+
+  return {
+    destroy,
+    getResult,
+    togglePause,
+    abandon,
+    setMoveVector,
+    requestDash,
+    get state() {
+      return state.current;
+    },
+    // 대시 쿨다운 남은 비율(0이면 사용 가능, 1이면 방금 사용). 터치 대시 버튼의 쿨다운 표시용.
+    get dashCooldownRatio() {
+      return DASH_COOLDOWN > 0 ? Math.min(1, dash.cooldown / DASH_COOLDOWN) : 0;
+    },
+  };
 }

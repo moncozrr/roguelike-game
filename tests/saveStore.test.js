@@ -187,3 +187,11 @@ test('버전 상수가 1이다(스키마를 바꾸면 이 테스트와 마이그
   assert.equal(SAVE_VERSION, 1);
   assert.equal(MAX_UPGRADE_LEVEL, 10);
 });
+
+test('도감: registered는 선택 항목이며 true/false만 받는다', () => {
+  const ok = { ...sampleSave(), bestiary: { wonyon: { kills: 5, registered: true }, midBoss: { kills: 1 } } };
+  const r = validateSave(ok);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.data.bestiary, ok.bestiary);
+  assert.equal(validateSave({ ...sampleSave(), bestiary: { wonyon: { kills: 5, registered: 'yes' } } }).ok, false);
+});

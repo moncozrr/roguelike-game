@@ -18,7 +18,7 @@ export function createDefaultSave() {
     nameFragments: 0, // 이름 등록 조각 [임시 이름]
     stats: { runs: 0, normalKills: 0, bossKills: 0, bestSurvivalSeconds: 0 },
     upgrades: {}, // { 업그레이드 id: 레벨 0~10 }
-    bestiary: {}, // { 몬스터 id: { kills } }
+    bestiary: {}, // { 몬스터 id: { kills, registered? } } registered: 이름 등록 조각으로 이름을 등록했는지
     achievements: {}, // { 업적 id: { claimed } }
   };
 }
@@ -56,7 +56,7 @@ export function validateSave(raw) {
 
   const problem =
     checkRecord('upgrades', raw.upgrades, (v) => (Number.isInteger(v) && v >= 0 && v <= MAX_UPGRADE_LEVEL ? null : `0~${MAX_UPGRADE_LEVEL}의 정수여야 합니다`)) ||
-    checkRecord('bestiary', raw.bestiary, (v) => (isPlainObject(v) && isCount(v.kills) ? null : 'kills가 0 이상의 정수인 객체여야 합니다')) ||
+    checkRecord('bestiary', raw.bestiary, (v) => (isPlainObject(v) && isCount(v.kills) && (v.registered === undefined || typeof v.registered === 'boolean') ? null : 'kills가 0 이상의 정수이고 registered는 true/false인 객체여야 합니다')) ||
     checkRecord('achievements', raw.achievements, (v) => (isPlainObject(v) && typeof v.claimed === 'boolean' ? null : 'claimed가 true/false인 객체여야 합니다'));
   if (problem) return { ok: false, error: problem };
 
@@ -65,7 +65,7 @@ export function validateSave(raw) {
   data.nameFragments = raw.nameFragments;
   for (const field of Object.keys(data.stats)) data.stats[field] = stats[field];
   for (const [key, level] of Object.entries(raw.upgrades)) data.upgrades[key] = level;
-  for (const [key, entry] of Object.entries(raw.bestiary)) data.bestiary[key] = { kills: entry.kills };
+  for (const [key, entry] of Object.entries(raw.bestiary)) data.bestiary[key] = entry.registered === undefined ? { kills: entry.kills } : { kills: entry.kills, registered: entry.registered };
   for (const [key, entry] of Object.entries(raw.achievements)) data.achievements[key] = { claimed: entry.claimed };
   return { ok: true, data };
 }

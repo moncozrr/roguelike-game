@@ -62,9 +62,20 @@ function restoreGlobals() {
 function createEventTarget() {
   const listeners = new Map();
   return {
-    addEventListener(type, fn) {
+    // options.signal이 중단되면 리스너를 뺀다(실제 브라우저와 같은 동작). listenerCount로 남은 수를 확인할 수 있다.
+    addEventListener(type, fn, options) {
       if (!listeners.has(type)) listeners.set(type, []);
       listeners.get(type).push(fn);
+      options?.signal?.addEventListener('abort', () => {
+        const list = listeners.get(type);
+        const i = list.indexOf(fn);
+        if (i >= 0) list.splice(i, 1);
+      });
+    },
+    listenerCount() {
+      let total = 0;
+      for (const list of listeners.values()) total += list.length;
+      return total;
     },
     dispatch(type, event) {
       for (const fn of listeners.get(type) ?? []) fn(event);
@@ -113,7 +124,7 @@ function createFakeContext() {
 
 // 게임을 하나 실행한다. 테스트가 끝나면 반드시 dispose()를 불러 전역 값을 되돌린다.
 //   press/release/tap: 키 입력, step/run/runUntil: 프레임 진행(1/60초 단위), game: 개발 모드 상태 핸들
-export function launchGame(startGame, { seed = 1, width = 800, height = 600, left = 0, top = 0 } = {}) {
+export function launchGame(startGame, { seed = 1, width = 800, height = 600, left = 0, top = 0, gameOptions } = {}) {
   installGlobals();
   const ctx = createFakeContext();
   const canvasEvents = createEventTarget();
@@ -124,14 +135,32 @@ export function launchGame(startGame, { seed = 1, width = 800, height = 600, lef
     getContext: () => ctx,
     addEventListener: canvasEvents.addEventListener,
   };
+  let frameId = 0;
+  let resizeObservers = 0;
+  let resizeDisconnects = 0;
   let fakeNow = 1000;
   let pendingFrame = null;
   setGlobal('performance', { now: () => fakeNow });
   setGlobal('requestAnimationFrame', (callback) => {
     pendingFrame = callback;
-    return 1;
+    frameId += 1;
+    return frameId;
   });
-  setGlobal('ResizeObserver', class { observe() {} });
+  setGlobal('cancelAnimationFrame', (id) => {
+    if (id === frameId) pendingFrame = null;
+  });
+  setGlobal(
+    'ResizeObserver',
+    class {
+      constructor() {
+        resizeObservers += 1;
+      }
+      observe() {}
+      disconnect() {
+        resizeDisconnects += 1;
+      }
+    },
+  );
   setGlobal('fetch', () => Promise.reject(new Error('테스트 환경에는 파일이 없습니다')));
   setGlobal(
     'Image',
@@ -145,9 +174,14 @@ export function launchGame(startGame, { seed = 1, width = 800, height = 600, lef
   const originalRandom = Math.random;
   Math.random = seededRandom(seed);
 
-  startGame(canvas);
+  const handle = startGame(canvas, gameOptions);
 
   const harness = {
+    handle,
+    // 아직 해제되지 않은 이벤트 리스너 수와 화면 크기 관찰자 수(재시작해도 쌓이지 않는지 확인용)
+    listenerCount: () => window.listenerCount() + document.listenerCount() + canvasEvents.listenerCount(),
+    liveResizeObservers: () => resizeObservers - resizeDisconnects,
+    hasPendingFrame: () => pendingFrame !== null,
     ctx,
     get game() {
       return window.__ninefoldVeil;
