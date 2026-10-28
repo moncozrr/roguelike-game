@@ -1,0 +1,52 @@
+THE NINEFOLD VEIL — CHARACTER-TO-SPRITE ADAPTATION
+Version 1.1 — Quarter-View Update
+
+PURPOSE
+Adapt an approved character reference into a production-oriented pixel-art sprite for The Ninefold Veil’s 2D hybrid, quarter-view game.
+
+IDENTITY PRESERVATION
+Preserve the approved character’s:
+- Hairstyle and dominant head silhouette.
+- Main costume silhouette and major color blocks.
+- Approved weapon or combat accessory.
+- Faction insignia or signature symbol, if established.
+- Overall personality and visual identity.
+
+Do not redesign the character’s costume, faction, weapon, or narrative identity during sprite adaptation. If the reference contains details that are unreadable at gameplay size, simplify them rather than inventing replacements. Adapt the pose and visible surfaces for quarter-view gameplay; do not change the character's established identity to achieve the angle.
+
+SPRITE DESIGN
+- Pixel-art-based rendering, with intentional pixel clusters and controlled shading.
+- Use an angled top-down quarter-view: show enough of the top-facing surfaces and body orientation to read the character on a ground plane, while keeping the face, weapon, and action pose legible.
+- Avoid flat overhead views that hide the character's face and weapon, side-scroller profiles, front-facing portrait poses, or inconsistent perspective between frames.
+- The established 2.5–3-head-tall proportion and nominal 48 × 48 logical-pixel target are initial references only; test in the current game before locking dimensions.
+- The sprite canvas may extend beyond a nominal size for hair, weapons, or silhouette features. Use consistent frame bounds where possible.
+- Simplify facial features, fabric folds, jewelry, embroidery, and textures.
+- Maintain clear separation between head, torso, limbs, and weapon.
+- Make the feet/contact point and body weight readable from the quarter-view camera. Keep the ground anchor stable across animation frames; motion may shift the body but should not cause unintended sliding or hopping.
+- Preserve enough contrast to distinguish the sprite from the battlefield and effects.
+- Do not simply scale down a detailed illustration. Rebuild the detail hierarchy specifically for gameplay readability.
+
+DIRECTIONAL SCOPE — MINIMUM FIRST TEST
+- Begin with four facing directions: up/away, down/toward camera, left, and right.
+- If the character's costume, weapon grip, hair, or asymmetrical accessories allow it, the left-facing sprite may be mirrored to create the right-facing version. Do not mirror when it reverses a meaningful emblem, weapon hand, or asymmetric design detail.
+- For diagonal movement, initially select the nearest cardinal-facing sprite direction instead of requiring dedicated diagonal sprites. This is a provisional asset-production recommendation; confirm it through an in-game test.
+- Do not assume the game requires four-direction or eight-direction animation in its code. This document specifies a low-cost art test, not an implementation decision.
+
+ANIMATION READINESS
+Design the sprite to support frame-based animation where required. Anticipated action categories include idle, movement, attack, dodge, hit, and death. Exact frame counts, timing, final directional coverage, and animation implementation remain to be specified by the game project.
+- Keep canvas size, scale, ground anchor, and perspective consistent across frames of the same animation.
+- Use anticipation, action, follow-through, and recovery where appropriate. Secondary elements such as hair, sleeves, robe hems, and ribbons should respond with slight delays rather than moving as rigid pieces.
+- Attack poses must show the actual body/weapon action clearly. Keep weapon arcs and magical trails separate from the base sprite when runtime control is useful.
+- Avoid unnecessary particles, detached glow, or cast shadows baked into the base sprite if those effects need to be controlled separately in game.
+
+OUTPUT REQUIREMENTS
+- One isolated character sprite on a transparent background, or a clearly organized sprite sheet when animation is requested.
+- For sprite sheets, use uniform frame cells, consistent scale and alignment, and clearly separated animation rows. Do not allow frames to overlap or crop essential body parts.
+- Clean edges and a readable silhouette.
+- No UI, labels, multiple characters, decorative frame, logo, or background scenery.
+- Maintain consistency with the approved shared palette and pixel-art treatment.
+
+VALIDATION
+Check the sprite at intended gameplay scale, against a representative quarter-view battlefield, and alongside common enemies, companions, projectiles, and combat effects. Validate all four facing directions, mirroring where used, foot grounding, overlap order, and attack readability. Revise if the character’s main identity or attack readability is lost.
+
+Do not assume a 3D rendering pipeline or engine change.

@@ -17,23 +17,17 @@ Responsibilities:
 - Design gameplay systems, combat mechanics, progression, enemies, companions, and game modes.
 - Prepare Game Design Documents (GDDs), technical requirements, acceptance criteria, and implementation plans.
 - Review design consistency, identify contradictions, evaluate balance, and prioritize features.
-- Prepare actionable prompts and specifications for Higgsfield, Codex, and Claude Code.
+- Prepare actionable prompts and specifications for the user-selected image-generation tool, Codex, and Claude Code.
 - Review implementation results against the intended game design.
 - Maintain a clear distinction between confirmed decisions, proposals, and unresolved questions.
 
 ChatGPT should not silently treat proposed ideas or placeholder values as finalized project decisions.
 
-### Higgsfield — Visual Asset Production
+### Visual Asset Production
 
-Higgsfield is responsible for producing visual assets when its available tools and connected capabilities support the requested task.
+Use the image-generation tool the user selects, including ChatGPT ImageGen or Higgsfield. The active art source of truth is `docs/reference/character-art-direction/`: its five supplied prompt/guideline files and the user-designated Dal visual reference. Follow those sources for character, enemy, boss, environment, and sprite design; preserve stated open questions instead of inventing final values.
 
-Responsibilities:
-- Develop character, companion, enemy, boss, environment, and visual concept assets.
-- Create visual references and adapt approved designs into game-ready sprite concepts.
-- Follow the project's established art direction, proportions, palette, silhouette requirements, and asset specifications.
-- Preserve visual consistency across related assets and character animations.
-
-Before any credit-consuming generation:
+For credit-consuming Higgsfield generation:
 1. Identify the intended asset and output.
 2. Check the available model and estimated credit cost when possible.
 3. Present the estimate and obtain explicit user approval.
@@ -126,7 +120,7 @@ Routine implementation details may be decided by Claude Code when they do not al
 
 Visual generation and code integration are separate responsibilities.
 
-Higgsfield produces visual assets; Claude Code integrates approved assets into the game.
+The user-selected image tool produces visual assets; Claude Code integrates approved assets into the game.
 
 Before integration, verify:
 - File format and transparency.
@@ -166,6 +160,6 @@ When the user is learning development, explain important technical choices in ac
 
 ## 9. Governing Principle
 
-**ChatGPT plans and reviews. Higgsfield creates visual assets. Codex assists with technical planning and independent review. Claude Code implements and debugs. The user retains final authority over major creative and project decisions.**
+**ChatGPT plans and reviews. The user-selected image-generation tool creates visual assets. Codex assists with technical planning and independent review. Claude Code implements and debugs. The user retains final authority over major creative and project decisions.**
 
 This division of responsibilities should improve consistency and reduce rework, but it does not replace testing, version control, or explicit approval of significant changes.

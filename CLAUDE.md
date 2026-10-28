@@ -35,7 +35,7 @@
 ## Workflow and Tool Responsibilities
 - Before making substantial changes, read `AI_WORKFLOW_AND_TOOL_RESPONSIBILITIES.md` and follow its workflow and tool responsibilities.
 - ChatGPT: leads game design, worldbuilding, narrative, gameplay systems, planning, and design review.
-- Higgsfield: produces visual assets only after the estimated credit cost is checked and the user explicitly approves generation.
+- Visual assets: follow the active character and graphics guidance in `docs/reference/character-art-direction/`. Use the image-generation tool the user selects (including ChatGPT ImageGen or Higgsfield). Before credit-consuming Higgsfield generation, check the estimated cost and get the user's explicit approval.
 - Codex: assists with technical planning, architecture review, code review, and independent verification.
 - Claude Code: primary implementation and debugging agent.
 

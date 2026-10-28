@@ -8,23 +8,34 @@
 |---|---|
 | 구현 위치 | 이 JS 저장소 (사용자 결정). Godot 이식은 **보류** (사용자 결정) |
 | 범위 변경 | 모바일 조작을 MVP에 포함 (사용자 결정, 기획서 2.1/10.2 수정함) |
+| 주인공 이름 | 기존 여성 주인공 이름은 **달(Dal)** [확정] (사용자 결정, 2026-10-28) |
 | 미결정 값 | 사용자가 "게임 컨셉에 맞게 임의로 정해도 좋다"고 위임함. 아래 **[임시]** 표시 값은 모두 이 위임에 따른 제안값이며 밸런스 확정값이 아님 |
 | 저장 | `localStorage`. 실패해도 게임은 계속 진행 (메모리 폴백) |
 
 분류 표기: **[확정]** 사용자 결정, **[임시]** 위임받아 제가 정한 값, **[기존]** 이미 구현됨, **[미결]** 아직 정하지 않음.
 
-## 1. 찾지 못한 설계 문서 (사용자께 요청)
+## 1. 아트 방향 참고 자료
 
-저장소, 홈 폴더, Downloads, Documents를 검색했지만 없었습니다.
+사용자는 2026-10-28 지정 폴더의 원문 다섯 개와 등록된 달(Dal) 시각 소스를
+현재 캐릭터·그래픽 지침으로 지정했다. 이 자료가 기존 프로젝트 문서에 있던
+이전 아트 지침을 대체한다. 원문에서 미정으로 남겨 둔 세부 값은 계속 미정이며,
+게임 규칙과 충돌하는 경우에는 별도로 확인한다.
 
-1. `PROTAGONIST — FEMALE LEAD CHARACTER CONCEPT.txt`
-2. `FACTION COMPANION CHARACTER PROMPT.txt`
-3. `COMMON ENEMY PROMPT.txt`
-4. `CHARACTER-TO-SPRITE ADAPTATION.txt`
-5. `Negative prompts.txt`
-6. 대화 "게임기획2" 및 "게임기획2 추가기획"의 내용
+- `CHARACTER ART DIRECTION.txt`
+- `CHARACTER-TO-SPRITE ADAPTATION.txt`
+- `COMMON ENEMY PROMPT.txt`
+- `FACTION COMPANION CHARACTER PROMPT.txt`
+- `Negative prompts.txt`
 
-이 문서들이 들어오면 아래 [임시] 값과 충돌하는지 대조하고, 충돌하면 문서 쪽이 우선합니다.
+사용자는 달(Dal)의 8방향 검토 시안을 이후 주인공 제작의 시각 기준으로
+지정했다. 원본 이미지는
+[`docs/reference/character-art-direction/DAL_8_DIRECTION_VISUAL_REFERENCE.png`](reference/character-art-direction/DAL_8_DIRECTION_VISUAL_REFERENCE.png)에
+등록했다. 검토 시안이므로 게임용 스프라이트 아틀라스로 바로 사용하지 않는다.
+
+별도 `PROTAGONIST — FEMALE LEAD CHARACTER CONCEPT.txt`와 대화 "게임기획2",
+"게임기획2 추가기획"의 본문은 현재 저장소에 없다. 주인공 이름은 사용자가
+**달(Dal)**로 정했으며, 그 밖의 자료에만 있을 수 있는 배경·성격 등 설정은
+확인되지 않은 상태로 둔다.
 
 ## 2. 흐름 [확정]
 

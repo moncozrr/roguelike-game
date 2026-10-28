@@ -1,0 +1,34 @@
+THE NINEFOLD VEIL — COMMON ENEMY & BOSS DESIGN PROMPT
+Version 1.0 — Draft for approval
+
+COMMON ENEMY
+Design an original enemy for The Ninefold Veil, a Korean mythology-inspired 2D hybrid survival roguelike. The in-game enemy should use a pixel-art-based style and remain readable in a crowded top-down battlefield.
+
+DESIGN RULES
+- Use clean pixel shapes, a strong silhouette, deliberate color blocks, and a restrained number of readable details.
+- The enemy may be eerie, cute, mischievous, hostile, or uncanny, but must fit the game’s mature dark-fantasy tone.
+- Prioritize one defining feature: head shape, mask, horn, weapon, talisman, body outline, or distinctive movement silhouette.
+- Use the shared blue-black / charcoal, jade / muted teal, and restrained vermilion palette where appropriate.
+- Do not rely on color alone to communicate enemy type or threat.
+- Avoid realistic skin textures, noisy gradients, tiny ornaments, excessive glow, excessive particles, and shapes that merge into the background.
+- The existing 32–48 logical-pixel range is a preliminary size reference only; select final size based on enemy role and gameplay tests.
+- Create isolated enemy art on a transparent background. Do not include text, UI, environmental scenery, or decorative borders.
+
+BOSS DESIGN
+Create an original boss with a distinctive silhouette and a meaningful connection to Korean supernatural folklore or the fractured-world setting. Distinguish the boss from common enemies through body structure, posture, head shape, signature weapon or appendage, markings, and attack patterns—not size or glow alone.
+
+The design must support two presentations:
+1. A more detailed illustration or pixel-art portrait for the bestiary and boss introduction.
+2. A simplified in-game representation with readable body shape, attack animation, and clear warning effects.
+
+BOSS COMBAT READABILITY
+- Attack telegraphs must be distinguishable from decorative background effects and routine enemy attacks.
+- The dangerous area and timing must remain readable against the environment.
+- Use shape, movement, and animation as well as color to communicate attack type.
+- Rich effects may emphasize impact, but must not obscure the boss’s body or the actual attack boundary.
+- Avoid excessive screen-wide particles, bloom, motion blur, or visual noise that prevents the player from reacting.
+
+HYBRID PRESENTATION
+Characters and enemies remain pixel-art-based. Environments may use richer layered 2D depth and controlled lighting. Effects may combine pixel-based forms with smooth glow and transparency. This does not authorize a 3D pipeline or engine change.
+
+Do not invent a boss’s narrative role, abilities, or faction unless established in the game design documents.

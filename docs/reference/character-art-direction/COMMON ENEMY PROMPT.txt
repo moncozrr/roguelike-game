@@ -1,0 +1,39 @@
+THE NINEFOLD VEIL — COMMON ENEMY & BOSS DESIGN PROMPT
+Version 1.1 — Quarter-View Update
+
+COMMON ENEMY
+Design an original enemy for The Ninefold Veil, a Korean mythology-inspired 2D hybrid survival roguelike. The in-game enemy should use a pixel-art-based style and remain readable in a crowded angled top-down quarter-view battlefield. The camera should reveal enough of the ground plane and selected top/side surfaces to communicate depth, while preserving clear combat readability.
+
+DESIGN RULES
+- Use clean pixel shapes, a strong silhouette, deliberate color blocks, and a restrained number of readable details.
+- Design the enemy's body orientation, feet/contact point, head, and weapon or appendages to read from the quarter-view camera. It should look grounded on the playfield, not like a front-facing portrait pasted onto the ground.
+- Keep the enemy's perspective consistent with the player, companions, props, and environment. Avoid flat overhead-only shapes, side-scroller poses, or incompatible camera angles.
+- The enemy may be eerie, cute, mischievous, hostile, or uncanny, but must fit the game’s mature dark-fantasy tone.
+- Prioritize one defining feature: head shape, mask, horn, weapon, talisman, body outline, or distinctive movement silhouette.
+- Use the shared blue-black / charcoal, jade / muted teal, and restrained vermilion palette where appropriate.
+- Do not rely on color alone to communicate enemy type or threat.
+- Avoid realistic skin textures, noisy gradients, tiny ornaments, excessive glow, excessive particles, and shapes that merge into the background.
+- The existing 32–48 logical-pixel range is a preliminary size reference only; select final size based on enemy role and gameplay tests. Canvas bounds may need to exceed the nominal body size for horns, tails, weapons, or silhouettes.
+- Create isolated enemy art on a transparent background. Do not include text, UI, environmental scenery, or decorative borders.
+- For the initial directional test, use four facing directions (up, down, left, right) where movement and attack behavior require them. Mirroring and diagonal-facing coverage should be decided after testing, not assumed for every enemy.
+
+BOSS DESIGN
+Create an original boss with a distinctive silhouette and a meaningful connection to Korean supernatural folklore or the fractured-world setting. Distinguish the boss from common enemies through body structure, posture, head shape, signature weapon or appendage, markings, and attack patterns—not size or glow alone.
+
+The design must support two presentations:
+1. A more detailed illustration or pixel-art portrait for the bestiary and boss introduction.
+2. A simplified in-game quarter-view representation with readable body shape, attack animation, and clear warning effects.
+
+BOSS COMBAT READABILITY
+- Attack telegraphs must be distinguishable from decorative background effects and routine enemy attacks.
+- The dangerous area and timing must remain readable against the environment and align with the quarter-view ground plane.
+- Make attack direction and hit area clear from the camera angle. A ground-targeted area, forward sweep, line attack, and circular warning should have distinguishable shapes and timing.
+- Use shape, movement, and animation as well as color to communicate attack type.
+- Pixel-based attack shapes may be enhanced by smooth glow, transparency, and particles, but the core boundary and direction must remain clear.
+- Rich effects may emphasize impact, but must not obscure the boss’s body or the actual attack boundary.
+- Avoid excessive screen-wide particles, bloom, motion blur, or visual noise that prevents the player from reacting.
+
+HYBRID PRESENTATION
+Characters and enemies remain pixel-art-based. Environments may use richer layered 2D depth and controlled lighting, all consistent with an angled top-down quarter-view. Effects may combine pixel-based forms with smooth glow and transparency. This does not authorize a 3D pipeline or engine change.
+
+Do not invent a boss’s narrative role, abilities, or faction unless established in the game design documents.

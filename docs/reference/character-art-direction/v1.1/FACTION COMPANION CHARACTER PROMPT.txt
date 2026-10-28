@@ -1,0 +1,35 @@
+THE NINEFOLD VEIL — FACTION COMPANION CHARACTER PROMPT
+Version 1.1 — Quarter-View Update
+
+Create an original companion character belonging to one of the four established factions in The Ninefold Veil: Jeoseung Saja, Dokkaebi, Gumiho, or Sansin. Follow the approved 2D hybrid art direction: pixel-art-based in-game characters, layered 2D quarter-view environments, and pixel-based combat effects enhanced with restrained smooth glow and particles.
+
+The in-game camera is an angled top-down quarter-view: show enough ground plane and selected top/side surfaces to convey depth, while keeping character silhouettes and combat actions readable. Do not use “webtoon style” as the defining visual direction for in-game assets. Do not assume a 3D pipeline or engine change.
+
+CHARACTER DESIGN
+- The character must have a distinct silhouette that remains recognizable at gameplay size and from the quarter-view camera.
+- Use a distinctive hairstyle or head shape, readable costume outline, and one signature ornament or faction emblem.
+- Include a primary weapon or combat accessory only when appropriate to the approved character concept.
+- Use the shared blue-black / charcoal, jade / muted teal, and vermilion palette, with a restrained faction-specific accent if useful.
+- Show faction identity through silhouette, costume structure, accessory, markings, and iconography—not color alone.
+- Reinterpret Korean folklore and traditional motifs in an original fantasy vocabulary.
+- Avoid excessive surface detail, tiny ornaments, generic European medieval armor, photorealistic textures, and details that become noise in a small sprite.
+- Ensure the body orientation, visible weapon, feet/contact point, and costume shapes agree with the shared quarter-view projection. Avoid a front-facing portrait pose or side-scroller profile for the in-game sprite.
+
+FACTION VISUAL DIRECTIONS
+- Jeoseung Saja: death, passage, records, spiritual authority.
+- Dokkaebi: bold energy, supernatural power, mischievous or forceful personality.
+- Gumiho: illusion, elegance, fox symbolism, supernatural intelligence.
+- Sansin: mountains, nature, spiritual guardianship, ancient authority.
+These are visual directions, not fixed stereotypes. Do not invent gameplay abilities, narrative relationships, or backstory unless separately provided.
+
+PRESENTATION AND SPRITE
+- For a reference sheet, show the complete character on a plain background, including important accessories.
+- The in-game version must be designed as a pixel-art sprite for the 2D hybrid quarter-view game—not merely a resized illustration.
+- The existing 2.5–3-head-tall proportion and nominal 48 × 48 logical-pixel size are preliminary references, not final requirements.
+- Preserve the hairstyle/head silhouette, main costume shape, faction identity, and signature accessory.
+- Simplify detail for readability and frame-based animation.
+- For the first production test, prepare four facing directions (up, down, left, right) only when needed for the companion's movement/combat. Use mirrored left/right frames only if asymmetric details remain correct. Dedicated diagonal sprites are deferred until the test demonstrates a need.
+- Keep the ground anchor, scale, and perspective consistent across animation frames. Separate magical trails and transient glow from the base sprite when practical.
+- Transparent background for isolated assets. No UI, labels, logos, decorative frames, or unrelated scenery.
+
+Do not assume all companions have identical body proportions or weapons. Maintain a shared art language while preserving each character’s individual silhouette.

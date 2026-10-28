@@ -1,0 +1,39 @@
+THE NINEFOLD VEIL — CHARACTER-TO-SPRITE ADAPTATION
+Version 1.0 — Draft for approval
+
+PURPOSE
+Adapt an approved character reference into a production-oriented pixel-art sprite for The Ninefold Veil’s 2D hybrid game.
+
+IDENTITY PRESERVATION
+Preserve the approved character’s:
+- Hairstyle and dominant head silhouette.
+- Main costume silhouette and major color blocks.
+- Approved weapon or combat accessory.
+- Faction insignia or signature symbol, if established.
+- Overall personality and visual identity.
+
+Do not redesign the character’s costume, faction, weapon, or narrative identity during sprite adaptation. If the reference contains details that are unreadable at gameplay size, simplify them rather than inventing replacements.
+
+SPRITE DESIGN
+- Pixel-art-based rendering, with intentional pixel clusters and controlled shading.
+- Character proportion is not restricted to 2.5–3 heads; approximately 2-head proportions are allowed (user decision, 2026-10-28). The nominal 48 × 48 logical-pixel target is an initial reference only; test in the current game before locking dimensions.
+- The sprite canvas may extend beyond a nominal size for hair, weapons, or silhouette features.
+- Simplify facial features, fabric folds, jewelry, embroidery, and textures.
+- Maintain clear separation between head, torso, limbs, and weapon.
+- Preserve enough contrast to distinguish the sprite from the battlefield and effects.
+- Do not simply scale down a detailed illustration. Rebuild the detail hierarchy specifically for gameplay readability.
+
+ANIMATION READINESS
+Design the sprite to support frame-based animation where required. Anticipated action categories include idle, movement, attack, dodge, hit, and death, but exact frame counts, timing, directional coverage, and animation implementation remain to be specified by the game project.
+Avoid unnecessary particles, detached glow, or cast shadows baked into the base sprite if those effects need to be controlled separately in game.
+
+OUTPUT REQUIREMENTS
+- One isolated character sprite on a transparent background.
+- Clean edges and a readable silhouette.
+- No UI, labels, multiple characters, decorative frame, logo, or background scenery.
+- Maintain consistency with the approved shared palette and pixel-art treatment.
+
+VALIDATION
+Check the sprite at intended gameplay scale, against a representative 2D battlefield, and alongside common enemies, companions, projectiles, and combat effects. Revise if the character’s main identity or attack readability is lost.
+
+Do not assume a 3D rendering pipeline or engine change.

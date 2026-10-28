@@ -1,0 +1,7 @@
+THE NINEFOLD VEIL — NEGATIVE PROMPTS
+Version 1.0 — Draft for approval
+
+photorealism, realistic 3D rendering, cinematic CGI, mandatory 3D pipeline, webtoon style as the defining in-game style, excessive surface detail, hyperrealistic skin, noisy textures, uncontrolled gradients, overly complex armor, excessive jewelry, tiny unreadable ornaments, muddy silhouettes, low contrast between character and battlefield, excessive bloom, excessive particles, excessive motion blur, full-screen effects that hide danger telegraphs, effects that obscure the character or attack boundary, grotesque gore emphasis, generic European medieval fantasy costume, inconsistent costume design, inconsistent hairstyle, inconsistent faction insignia, color-only faction identification, extra limbs, malformed hands, duplicated weapons, cropped full-body reference, baked-in UI, text, logos, watermarks, decorative frames, unintended background scenery.
+
+NOTE
+These are general exclusions, not a substitute for asset-specific instructions. Smooth glow and layered 2D lighting effects are allowed when they support the approved hybrid direction and preserve gameplay readability. Do not treat this prompt as a ban on all smooth effects or all atmospheric backgrounds.

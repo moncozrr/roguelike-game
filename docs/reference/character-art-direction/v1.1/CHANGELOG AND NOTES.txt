@@ -1,0 +1,51 @@
+THE NINEFOLD VEIL — QUARTER-VIEW PROMPT UPDATE
+Version 1.1 — Change Log and Implementation Notes
+
+WHY THIS UPDATE EXISTS
+The newly supplied “Moonlit Shrine Battle” reference indicates a preference for an angled quarter-view presentation with layered environmental depth and readable action. The earlier prompts specified a 2D hybrid style but left the camera projection open; the common-enemy prompt explicitly referred to a “top-down battlefield.” This update aligns the five supplied prompt documents with the new direction.
+
+USER-CONFIRMED DECISIONS
+- Apply the quarter-view direction across the full visual scope: characters, companions, enemies, bosses, environments, and combat effects.
+- Prefer depth-rich 2D backgrounds while keeping combat readable.
+- Combine pixel-based effect shapes with smooth glow and particles.
+- For movement directions, propose the minimum viable setup rather than locking a larger directional set now.
+
+CHANGES MADE
+1. CHARACTER ART DIRECTION.txt
+   - Defines an angled top-down quarter-view, prioritizing action readability over rigid mathematical isometric projection.
+   - Adds consistent ground-plane, environmental projection, sprite grounding, and attack-telegraph rules.
+   - Proposes four cardinal facing directions for the first visual test; diagonal sprites are deferred pending evidence from testing.
+   - Clarifies that the shrine-battle image is a reference for depth, lighting, scenery, and action readability—not a command to copy the scene or UI.
+
+2. CHARACTER-TO-SPRITE ADAPTATION.txt
+   - Adds quarter-view sprite orientation, ground anchor, perspective consistency, and animation stability requirements.
+   - Recommends testing up/down/left/right first, mirroring left/right only when the character's asymmetry permits it.
+   - Recommends choosing the nearest cardinal-facing sprite during diagonal movement as an initial art-production shortcut. This is not a code or gameplay requirement.
+
+3. COMMON ENEMY PROMPT.txt
+   - Replaces the “top-down battlefield” description with an angled quarter-view battlefield.
+   - Adds enemy grounding, consistent projection, and attack telegraphs aligned to the ground plane.
+   - Keeps boss lore and abilities constrained by established design documents.
+
+4. FACTION COMPANION CHARACTER PROMPT.txt
+   - Aligns companion design and animation with the same camera, ground-plane, and minimum-direction test.
+   - Preserves the four established factions and existing character identity rules.
+
+5. Negative prompts.txt
+   - Adds exclusions for flat overhead-only views that hide the face/weapon, side-scroller poses, inconsistent camera angles, floating feet, and unreadable ground-targeted effects.
+   - Does not ban all top-down visibility or require strict mathematical isometric projection.
+
+PRESERVED DECISIONS
+- 2D hybrid visual direction; pixel-art-based in-game characters and enemies.
+- Layered 2D backgrounds with atmosphere and controlled lighting.
+- Blue-black/charcoal, jade/muted teal, and vermilion/crimson shared palette.
+- Korean mythology-inspired dark-fantasy identity and the four established factions.
+- No approved engine change and no 3D asset pipeline.
+- The 2.5–3-head-tall proportion and nominal 48 × 48 logical-pixel target remain preliminary, not mandatory.
+- Lobby/selection presentation style, exact pixel scale, palette limits, frame counts, and final directional coverage remain unresolved.
+
+PRODUCTION RECOMMENDATION — NOT YET A LOCKED IMPLEMENTATION DECISION
+Start with one protagonist, one common enemy, and a small environment test under the same quarter-view camera. Create four cardinal-facing sprite directions first, mirror side-facing art only if safe, and test diagonal movement using the nearest cardinal-facing sprite. Add dedicated diagonal sprites only if visual testing shows that the compromise harms combat readability. Validate the art in the actual game before fixing dimensions or animation counts.
+
+SCOPE LIMIT
+These are revised prompt documents only. They do not modify the local game project, engine, input handling, camera code, asset pipeline, or existing source files in C:\Users\monco\Projects\roguelike-game.

@@ -1,0 +1,87 @@
+THE NINEFOLD VEIL — CHARACTER & VISUAL ART DIRECTION
+Version 1.0 — Draft for approval
+
+PROJECT IDENTITY
+Create original 2D assets for The Ninefold Veil, a Korean mythology-inspired dark fantasy survival roguelike. The visual identity combines Korean supernatural folklore, the afterlife, dimensional fractures, and multiple overlapping worlds. Assets must be distinctive, readable during dense combat, practical to produce, and adaptable for browser, mobile, and PC presentation.
+
+APPROVED DIRECTION
+- In-game visual direction: 2D hybrid.
+- Characters and ordinary enemies: pixel-art-based sprites.
+- Environments: layered 2D backgrounds with depth, atmosphere, and controlled lighting.
+- Combat effects: rich, smooth effects balanced with gameplay readability.
+- Do not assume or introduce a 3D pipeline or change the existing engine. Any such change requires separate approval.
+- Do not use “webtoon style” as the defining visual direction for in-game assets.
+
+CORE VISUAL LANGUAGE
+- Pixel-art characters with readable silhouettes and deliberate color blocking.
+- Layered 2D environments may use richer detail than character sprites, but the combat area must remain visually clear.
+- Combine pixel-based effect shapes with restrained smooth glow, transparency, and particles where useful.
+- Keep a mature, mysterious dark-fantasy tone. Characters should be appealing and memorable without becoming grotesque, excessively grim, sexualized, or childish.
+- Avoid generic European medieval fantasy as the default design language. Reinterpret Korean clothing, folklore, talismans, ceremonial objects, ornaments, and supernatural symbolism in an original fantasy vocabulary.
+
+VISUAL HIERARCHY
+For characters, prioritize:
+1. Primary silhouette and body shape.
+2. Hairstyle and head silhouette.
+3. Main costume structure and large color blocks.
+4. Primary weapon or combat accessory, when established.
+5. Signature symbol, faction emblem, and limited secondary details.
+Every major accessory should communicate identity or function. Remove details that become noise at gameplay size. Do not shrink a detailed illustration mechanically to create a sprite; redesign the hierarchy for the target size.
+
+GLOBAL COLOR SYSTEM
+The established shared palette uses:
+- Blue-black and charcoal for depth, structure, and costume foundations.
+- Jade and muted teal for supernatural energy and selected magical elements.
+- Vermilion and restrained crimson for seals, warnings, and focal accents.
+Each faction may have a secondary accent, but the whole cast should still feel like one game. Exact hex codes and palette limits are not yet approved. Any sample color values are provisional until tested against the reference video and game screen.
+Color must never be the only means of distinguishing characters, factions, enemy types, or danger. Use silhouette, markings, shape language, animation, and iconography as well.
+
+CHARACTER PRESENTATION
+- Lobby / selection art may be a more detailed full-body 2D illustration or a higher-resolution pixel-art portrait, depending on the approved asset pipeline. This presentation style is not yet locked.
+- In-game sprites must be pixel-art-based, readable at their actual display size, and visually consistent with the approved character design.
+- Preserve hairstyle, dominant costume silhouette, main colors, signature accessory, and established faction identity between presentation art and sprites.
+- Show the full costume, footwear, weapon, and signature accessory in reference sheets where applicable. Use a plain, unobtrusive background and a readable pose.
+- Do not add baked-in UI, captions, logos, decorative borders, or unrelated scenery unless specifically requested.
+
+IN-GAME SPRITE GUIDANCE
+- Character proportion is not restricted to 2.5–3 heads; approximately 2-head (chibi-leaning) proportions are allowed (user decision, 2026-10-28). The nominal 48 × 48 logical-pixel target remains an initial reference, not a final mandatory dimension.
+- Canvas bounds may exceed the nominal size when hair, weapon, or silhouette requires it.
+- Simplify face, folds, ornaments, and surface texture for readability.
+- Maintain clear separation between head, torso, limbs, and weapon.
+- Use consistent pixel clusters, edge treatment, shading logic, and contrast across the cast. Exact pixel scale, outline policy, palette size, frame counts, and directional coverage remain unresolved until a style test is approved.
+
+BACKGROUND AND COMBAT READABILITY
+- Build depth through 2D layers, tile and prop variation, controlled value contrast, atmospheric elements, and lighting effects where practical.
+- Keep the primary combat space less visually busy than distant scenery and decorative edges.
+- Separate ground decoration, obstacles, characters, projectiles, attack warnings, foreground effects, and UI into clear visual layers where supported by implementation.
+- Highest visual priority: boss attack telegraphs and dangerous zones. Next: player character, dodge, and player-controlled skills. Supporting effects and routine hit particles must not obscure these.
+- Rich effects are welcome, but do not cover collision points, hide enemy silhouettes, or make different attack warnings look alike.
+- Screen shake, bloom, motion blur, and full-screen flashes should be restrained and optional where feasible.
+
+FACTION IDENTITY
+The four major factions must remain visually distinguishable through silhouette, costume structure, emblem, accessory, and iconography—not color alone.
+- Jeoseung Saja: death, passage, records, spiritual authority.
+- Dokkaebi: bold energy, supernatural power, mischievous or forceful personality.
+- Gumiho: illusion, elegance, fox symbolism, supernatural intelligence.
+- Sansin: mountains, nature, spiritual guardianship, ancient authority.
+These are directions, not mandatory stereotypes. Do not invent an individual character’s faction, backstory, relationship, or ability unless established by narrative/gameplay documentation.
+
+ASSET PRODUCTION RULES
+- 2D assets only under the currently approved direction; do not introduce dependence on high-fidelity 3D rendering.
+- Isolated sprites and effects should have transparent backgrounds when appropriate.
+- Keep silhouettes clean and avoid unnecessary particles in base character art.
+- Design assets for frame-based animation where applicable.
+- Equipment upgrades do not change a character’s appearance in the current design scope unless separately approved.
+- Check assets at intended gameplay size and in a crowded combat mock-up before approval.
+- Optimize asset detail and effect density for browser, mobile, and PC use; performance targets should be tested rather than assumed.
+
+WORKFLOW
+1. Review the supplied reference video and approved project documents.
+2. Create a small visual style test before producing a large asset set.
+3. Establish a protagonist design sheet and a matching in-game sprite.
+4. Test sprite readability against a representative 2D battlefield.
+5. Approve the pixel scale, palette, shading, animation conventions, and effect intensity based on the test.
+6. Apply the approved rules to companions, enemies, bosses, environments, and UI.
+
+OVERALL QUALITY GOAL
+A distinctive Korean mythology-inspired 2D hybrid roguelike: readable pixel-art characters, atmospheric layered 2D environments, and rich but legible combat effects. Prioritize consistency, readability, and production practicality over excessive detail or cinematic spectacle.
