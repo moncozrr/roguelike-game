@@ -2,6 +2,8 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
+import { loadDalSprite, dalBob } from './dalSprite.js';
+import { directionIndexFromVector } from './direction.js';
 import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE, BOUNDARY, BOSS, PLAYER_HEALTH, MAGNET } from './config.js';
 import { monsterIdForEnemy } from './data/monsters.js';
 import { quantizeToEightDirections } from './touchInput.js';
@@ -102,6 +104,9 @@ export function startGame(canvas, options = {}) {
   const dash = { active: false, remaining: 0, dx: 0, dy: 0, cooldown: 0, startX: 0, startY: 0, elapsed: 0 };
   let sprite = null; // 로딩에 성공하면 캐릭터 스프라이트, 아니면 null(원형으로 표시)
   let facingRight = true; // 위아래 이동에서는 마지막 좌우 방향을 유지
+  let dalSprite = null; // 달 8방향 스프라이트. 로딩에 성공하면 기존 스프라이트(sprite)보다 우선한다.
+  let directionIndex = 0; // 달이 보는 방향(direction.js의 DIRECTION_NAMES 인덱스). 처음엔 오른쪽
+  let drawSnap = null; // 이번 프레임의 도트 정렬 값(drawEntities에서 정한다)
   let walkTime = 0; // 걷기 애니메이션 진행 시간(초)
   let dashRequested = false; // Space를 새로 눌렀을 때만 true, update에서 한 번 처리하고 꺼짐
   let spaceHeld = false; // Space를 누르고 있는 동안 true (자동 재발동 방지)
@@ -305,6 +310,7 @@ export function startGame(canvas, options = {}) {
     lastDirection.x = 1;
     lastDirection.y = 0;
     facingRight = true;
+    directionIndex = 0;
     walkTime = 0;
     player.x = startPosition.x;
     player.y = startPosition.y;
@@ -337,8 +343,9 @@ export function startGame(canvas, options = {}) {
     // 좌우·위쪽 여백을 그림 크기만큼 둔다.
     // 그림은 항상 실제 좌표(발밑 = y + PLAYER_RADIUS)에 그리므로 발 위치와 좌표는 어긋나지 않는다.
     // 월드가 아주 작아 여백이 월드 절반을 넘으면 범위가 뒤집히지 않게 절반으로 제한한다.
-    const marginX = Math.min(Math.max(PLAYER_RADIUS, sprite?.halfWidth ?? 0), WORLD.width / 2);
-    const marginTop = Math.min(Math.max(PLAYER_RADIUS, (sprite?.height ?? 0) - PLAYER_RADIUS), WORLD.height / 2);
+    const body = dalSprite ?? sprite;
+    const marginX = Math.min(Math.max(PLAYER_RADIUS, body?.halfWidth ?? 0), WORLD.width / 2);
+    const marginTop = Math.min(Math.max(PLAYER_RADIUS, (body?.height ?? 0) - PLAYER_RADIUS), WORLD.height / 2);
     player.x = Math.min(Math.max(player.x, marginX), WORLD.width - marginX);
     player.y = Math.min(Math.max(player.y, marginTop), WORLD.height - PLAYER_RADIUS);
   }
@@ -396,6 +403,7 @@ export function startGame(canvas, options = {}) {
     dash.elapsed = 0;
     health.startDashInvulnerability(); // 대시 무적 시작(피격 후 보호 시간은 건드리지 않는다)
     if (dir.x !== 0) facingRight = dir.x > 0;
+    directionIndex = directionIndexFromVector(dir.x, dir.y, directionIndex);
   }
 
   function updateDash(dt) {
@@ -458,6 +466,7 @@ export function startGame(canvas, options = {}) {
 
     walkTime += dt;
     if (dir.x !== 0) facingRight = dir.x > 0;
+    directionIndex = directionIndexFromVector(dir.x, dir.y, directionIndex);
     lastDirection.x = dir.x;
     lastDirection.y = dir.y;
     player.x += dir.x * PLAYER_SPEED * mods.moveSpeedMultiplier * dt;
@@ -591,7 +600,17 @@ export function startGame(canvas, options = {}) {
     sprite.draw(ctx, frame, player.x, player.y + PLAYER_RADIUS, facingRight);
   }
 
+  function drawDalSprite() {
+    // 대시 중에는 흔들지 않는다. 이동 판정 원의 아랫부분을 발밑으로 삼는다(기존 스프라이트와 같다).
+    const bob = dash.active ? 0 : dalBob(walkTime > 0, walkTime);
+    dalSprite.draw(ctx, directionIndex, player.x, player.y + PLAYER_RADIUS, bob, drawSnap);
+  }
+
   function drawPlayer() {
+    if (dalSprite) {
+      drawDalSprite();
+      return;
+    }
     if (sprite) {
       drawPlayerSprite();
       return;
@@ -929,6 +948,7 @@ export function startGame(canvas, options = {}) {
   // 아래쪽(y가 같거나 큰) 적은 플레이어 앞에 그려서 겹칠 때 앞뒤가 자연스럽게 보이게 한다.
   function drawEntities(cam) {
     const snap = { camX: cam.x, camY: cam.y, dpr: pixelRatio }; // 도트 그림을 정수 픽셀에 맞춰 그리기 위한 값
+    drawSnap = snap;
     const order = enemies.slice().sort((a, b) => a.y - b.y); // 그리기 순서만 정렬하고 원래 목록은 건드리지 않는다.
     let i = 0;
     const drawEnemy = (e) => {
@@ -1141,6 +1161,10 @@ export function startGame(canvas, options = {}) {
   loadSprite().then((loaded) => {
     sprite = loaded;
     clampPlayer(); // 여백이 넓어졌으므로 이미 가장자리에 있던 플레이어를 안쪽으로 맞춘다.
+  });
+  loadDalSprite().then((loaded) => {
+    dalSprite = loaded; // 실패하면 null이라 기존 스프라이트를 계속 쓴다.
+    clampPlayer();
   });
   enemySprites.load(); // 실패해도 예외 없이 임시 원형으로 대체되므로 결과를 기다리지 않는다.
 
