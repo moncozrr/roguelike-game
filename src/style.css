@@ -446,6 +446,36 @@ button.card {
   width: 100%;
 }
 
+/* 캐릭터 선택: 두 장의 큰 일러스트 카드. 그림의 가로세로 비율이 달라도 같은 높이 칸 안에 맞춰 넣는다. */
+.character-select {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.character-select .card-grid {
+  width: 100%;
+  max-width: 720px;
+}
+
+.character-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.character-card {
+  align-items: center;
+  text-align: center;
+}
+
+.character-portrait {
+  width: 100%;
+  height: clamp(200px, 42vh, 340px);
+  object-fit: contain;
+  pointer-events: none; /* 그림을 눌러도 카드 버튼이 눌리게 한다 */
+  user-select: none;
+}
+
 .monster-name {
   letter-spacing: 0.15em;
 }

@@ -34,7 +34,7 @@ export function lobbyScreen(app) {
   };
 }
 
-// 던전 선택: 카드를 누르면 강조되고, 입장 버튼은 입장할 수 있는 던전을 골랐을 때만 켜진다.
+// 던전 선택: 카드를 누르면 강조되고, 다음 버튼은 입장할 수 있는 던전을 골랐을 때만 켜진다. 다음은 캐릭터 선택 화면이다.
 export function dungeonSelectScreen(app, { selectedId = null } = {}) {
   const selection = createDungeonSelection();
   if (selectedId) selection.select(selectedId);
@@ -66,8 +66,8 @@ export function dungeonSelectScreen(app, { selectedId = null } = {}) {
         h('div', { class: 'card-grid dungeon-grid' }, DUNGEONS.map(card)),
         h(
           'button',
-          { class: 'btn btn-primary btn-go', type: 'button', disabled: !selection.canEnter, onClick: () => app.startBattle(selection.enter()) },
-          chosen && !chosen.available ? '준비 중' : '입장',
+          { class: 'btn btn-primary btn-go', type: 'button', disabled: !selection.canEnter, onClick: () => app.go('characters', { dungeonId: selection.enter() }) },
+          chosen && !chosen.available ? '준비 중' : '캐릭터 선택',
         ),
       ),
     });

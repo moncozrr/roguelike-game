@@ -2,7 +2,8 @@
 // 좌표는 CSS 픽셀 단위로 다루고, 그리기 직전에만 devicePixelRatio를 적용한다.
 
 import { loadSprite, WALK_FPS } from './sprite.js';
-import { loadDalSprite, dalBob } from './dalSprite.js';
+import { loadCharacterSprite, bobOffset } from './characterSprite.js';
+import { getCharacter, DEFAULT_CHARACTER_ID } from './data/characters.js';
 import { directionIndexFromVector } from './direction.js';
 import { GAME_TITLE, PLAYER, DASH, WORLD, SPAWN, ENEMY, ENEMY_PROJECTILE, XP, MAX_FRAME_TIME, NOTICE_DURATION, TIMELINE, BOUNDARY, BOSS, PLAYER_HEALTH, MAGNET } from './config.js';
 import { monsterIdForEnemy } from './data/monsters.js';
@@ -79,10 +80,11 @@ const KEY_DIRECTIONS = {
 //   onRunEnd   런이 끝나면(게임 오버/승리) 결과와 함께 정확히 한 번 불린다. 주어지면 Enter 재시작은 막는다(재도전은 로비가 새 게임을 만든다).
 //   modifiers  영구 업그레이드 보정값: { maxHpBonus, attackMultiplier, moveSpeedMultiplier, magnetBonus, boundaryDurabilityMultiplier }
 //   dungeonId  결과에 그대로 실어 보내는 던전 번호표(전투 규칙에는 영향 없음)
-//   hudTop     true면 HP/경험치 바를 왼쪽 위에 그린다(터치 화면에서 조이스틱과 겹치지 않게)
+//   characterId 플레이어 모습(data/characters.js의 id). 모습만 바뀌고 전투 규칙은 같다. 생략하거나 모르는 값이면 달
+//   hudTop    true면 HP/경험치 바를 왼쪽 위에 그린다(터치 화면에서 조이스틱과 겹치지 않게)
 // 반환: { destroy, getResult, togglePause, abandon, setMoveVector, requestDash, state } — destroy()가 모든 리스너와 루프를 해제한다.
 export function startGame(canvas, options = {}) {
-  const { autoStart = false, onRunEnd = null, dungeonId = null, hudTop = false } = options;
+  const { autoStart = false, onRunEnd = null, dungeonId = null, hudTop = false, characterId = null } = options;
   const mods = { maxHpBonus: 0, attackMultiplier: 1, moveSpeedMultiplier: 1, magnetBonus: 0, boundaryDurabilityMultiplier: 1, ...options.modifiers };
   const abort = new AbortController(); // 등록한 모든 이벤트 리스너를 destroy()에서 한 번에 해제하는 데 쓴다.
   const listen = { signal: abort.signal };
@@ -95,6 +97,14 @@ export function startGame(canvas, options = {}) {
   const touchMove = { x: 0, y: 0 }; // 가상 조이스틱 값(길이 0~1). 키보드와 별개로 저장하고 읽을 때 합친다.
 
   const ctx = canvas.getContext('2d');
+  const gardenArt = {
+    ground: new Image(),
+    pattern: null,
+  };
+  gardenArt.ground.onload = () => {
+    gardenArt.pattern = ctx.createPattern(gardenArt.ground, 'repeat');
+  };
+  gardenArt.ground.src = '/assets/environments/ruined_joseon/garden_blossom/ground_blossom_path.png';
   const pressed = new Set();
   const size = { width: 0, height: 0 }; // 화면(캔버스) 크기. 플레이어 위치 계산에는 쓰지 않는다.
   // 플레이어는 월드 좌표로 관리한다. 시작 위치는 월드 중앙이고, 단계 3의 경계 중심으로 쓰기 위해 기록해 둔다.
@@ -104,8 +114,8 @@ export function startGame(canvas, options = {}) {
   const dash = { active: false, remaining: 0, dx: 0, dy: 0, cooldown: 0, startX: 0, startY: 0, elapsed: 0 };
   let sprite = null; // 로딩에 성공하면 캐릭터 스프라이트, 아니면 null(원형으로 표시)
   let facingRight = true; // 위아래 이동에서는 마지막 좌우 방향을 유지
-  let dalSprite = null; // 달 8방향 스프라이트. 로딩에 성공하면 기존 스프라이트(sprite)보다 우선한다.
-  let directionIndex = 0; // 달이 보는 방향(direction.js의 DIRECTION_NAMES 인덱스). 처음엔 오른쪽
+  let characterSprite = null; // 선택한 캐릭터의 8방향 스프라이트. 로딩에 성공하면 기존 스프라이트(sprite)보다 우선한다.
+  let directionIndex = 0; // 캐릭터가 보는 방향(direction.js의 DIRECTION_NAMES 인덱스). 처음엔 오른쪽
   let drawSnap = null; // 이번 프레임의 도트 정렬 값(drawEntities에서 정한다)
   let walkTime = 0; // 걷기 애니메이션 진행 시간(초)
   let dashRequested = false; // Space를 새로 눌렀을 때만 true, update에서 한 번 처리하고 꺼짐
@@ -343,7 +353,7 @@ export function startGame(canvas, options = {}) {
     // 좌우·위쪽 여백을 그림 크기만큼 둔다.
     // 그림은 항상 실제 좌표(발밑 = y + PLAYER_RADIUS)에 그리므로 발 위치와 좌표는 어긋나지 않는다.
     // 월드가 아주 작아 여백이 월드 절반을 넘으면 범위가 뒤집히지 않게 절반으로 제한한다.
-    const body = dalSprite ?? sprite;
+    const body = characterSprite ?? sprite;
     const marginX = Math.min(Math.max(PLAYER_RADIUS, body?.halfWidth ?? 0), WORLD.width / 2);
     const marginTop = Math.min(Math.max(PLAYER_RADIUS, (body?.height ?? 0) - PLAYER_RADIUS), WORLD.height / 2);
     player.x = Math.min(Math.max(player.x, marginX), WORLD.width - marginX);
@@ -478,8 +488,14 @@ export function startGame(canvas, options = {}) {
   // 격자는 월드 좌표 48px 배수에 놓이므로 카메라가 움직이면 화면에서 함께 움직인다.
   // 얇은 선이 번지지 않도록, 월드 좌표를 화면 좌표로 바꾼 뒤 정수 픽셀에 맞춰 그린다.
   function drawFloor(cam) {
-    ctx.fillStyle = '#16141d';
+    ctx.fillStyle = '#b69a76';
     ctx.fillRect(0, 0, size.width, size.height);
+
+    if (gardenArt.pattern) {
+      gardenArt.pattern.setTransform(new DOMMatrix([1, 0, 0, 1, -cam.x, -cam.y]));
+      ctx.fillStyle = gardenArt.pattern;
+      ctx.fillRect(0, 0, size.width, size.height);
+    }
 
     const tile = 48;
     const view = viewRect(cam, size);
@@ -489,7 +505,7 @@ export function startGame(canvas, options = {}) {
     const top = Math.max(view.top, 0);
     const bottom = Math.min(view.bottom, WORLD.height);
 
-    ctx.strokeStyle = 'rgba(201, 162, 74, 0.06)';
+    ctx.strokeStyle = 'rgba(89, 73, 55, 0.07)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let wx = Math.max(Math.ceil(left / tile), 1) * tile; wx < right; wx += tile) {
@@ -516,7 +532,7 @@ export function startGame(canvas, options = {}) {
       Math.max(size.width, size.height) * 0.75,
     );
     vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    vignette.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    vignette.addColorStop(1, 'rgba(34, 27, 24, 0.18)');
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, size.width, size.height);
   }
@@ -600,15 +616,15 @@ export function startGame(canvas, options = {}) {
     sprite.draw(ctx, frame, player.x, player.y + PLAYER_RADIUS, facingRight);
   }
 
-  function drawDalSprite() {
+  function drawCharacterSprite() {
     // 대시 중에는 흔들지 않는다. 이동 판정 원의 아랫부분을 발밑으로 삼는다(기존 스프라이트와 같다).
-    const bob = dash.active ? 0 : dalBob(walkTime > 0, walkTime);
-    dalSprite.draw(ctx, directionIndex, player.x, player.y + PLAYER_RADIUS, bob, drawSnap);
+    const bob = dash.active ? 0 : bobOffset(walkTime > 0, walkTime);
+    characterSprite.draw(ctx, directionIndex, player.x, player.y + PLAYER_RADIUS, bob, drawSnap);
   }
 
   function drawPlayer() {
-    if (dalSprite) {
-      drawDalSprite();
+    if (characterSprite) {
+      drawCharacterSprite();
       return;
     }
     if (sprite) {
@@ -1162,8 +1178,10 @@ export function startGame(canvas, options = {}) {
     sprite = loaded;
     clampPlayer(); // 여백이 넓어졌으므로 이미 가장자리에 있던 플레이어를 안쪽으로 맞춘다.
   });
-  loadDalSprite().then((loaded) => {
-    dalSprite = loaded; // 실패하면 null이라 기존 스프라이트를 계속 쓴다.
+  const character = getCharacter(characterId) ?? getCharacter(DEFAULT_CHARACTER_ID);
+  loadCharacterSprite(character.sheet).then((loaded) => {
+    if (destroyed) return; // 불러오는 사이에 게임이 끝났으면 쓰지 않는다.
+    characterSprite = loaded; // 실패하면 null이라 기존 스프라이트를 계속 쓴다.
     clampPlayer();
   });
   enemySprites.load(); // 실패해도 예외 없이 임시 원형으로 대체되므로 결과를 기다리지 않는다.

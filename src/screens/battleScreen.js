@@ -17,7 +17,7 @@ export function isTouchLayout() {
   }
 }
 
-export function battleScreen(app, { dungeonId }) {
+export function battleScreen(app, { dungeonId, characterId = null }) {
   const dungeon = getDungeon(dungeonId);
   const touch = isTouchLayout();
   const abort = new AbortController();
@@ -46,6 +46,7 @@ export function battleScreen(app, { dungeonId }) {
     game = startGame(canvas, {
       autoStart: true,
       dungeonId,
+      characterId,
       hudTop: touch,
       modifiers: app.profile.modifiers(),
       onRunEnd: (result) => {

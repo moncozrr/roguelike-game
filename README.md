@@ -39,7 +39,9 @@ src/gameState.js            게임 상태(ready/playing/paused/gameover/levelup/
 src/timeline.js             게임 시간에 따른 이벤트 발동(120초, 180초, 300초)
 src/game.js                 게임 루프, 이동, 대시, 그리기, HUD/오버레이
 src/sprite.js               캐릭터 스프라이트 로딩/그리기(달 시트 로딩 실패 시 대체로 사용)
-src/dalSprite.js            달 8방향 스프라이트 로딩/그리기(대기 포즈만, 이동 중 1px 흔들림)
+src/characterSprite.js      캐릭터(달, 무진) 8방향 스프라이트 로딩/그리기(대기 포즈만, 이동 중 1px 흔들림)
+src/data/characters.js      캐릭터 목록(달, 무진)과 선택 상태
+src/screens/characterSelectScreen.js  던전 선택 다음의 캐릭터 선택 화면
 src/direction.js            이동 벡터에서 8방향 선택(경계 이력 포함), 달 시트 칸 배치
 src/enemy.js                일반 적(원혼): 추적, 적끼리 밀어내기(공간 격자), 월드 안 제한
 src/enemySprites.js         적 스프라이트 로딩(left/right), 방향별 그리기, 실패 시 원형 대체
@@ -58,6 +60,8 @@ tests/                      자동 테스트(experience/rewards/newWeapons/prodB
 src/style.css               화면 스타일
 public/assets/characters/   임시 주인공 스프라이트(PNG + 프레임 JSON)
 public/assets/characters/dal/   달 8방향 시트 dal_8dir_48.png(192x96, 48px 칸 4x2). tools/make-dal-sheet.ps1로 art-assets 시안에서 생성
+public/assets/characters/mujin/ 무진 8방향 시트 mujin_8dir_48.png(192x96, 같은 규격)
+public/assets/characters/portraits/  캐릭터 선택 화면 일러스트(tools/make-portraits.ps1로 art-assets에서 생성)
 public/assets/sprites/enemies/wonyon/   원혼 스프라이트: wonyon_right_48.png, wonyon_left_48.png
 docs/reference/enemies/wonyon/          원혼 디자인 참고 이미지(preview.png, 게임에서 사용하지 않음)
 docs/reference/character-art-direction/ 현재 캐릭터·그래픽 아트 지침 및 달(Dal) 주인공 시각 기준 소스

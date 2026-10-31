@@ -20,7 +20,7 @@ export function currencyBar(profile) {
 }
 
 // 메뉴 화면 틀: 제목줄(뒤로 가기 + 제목 + 재화), 저장 안내, 본문.
-export function menuFrame(app, { title, back = 'lobby', body }) {
+export function menuFrame(app, { title, back = 'lobby', backParams = {}, body }) {
   const warning = saveWarning(app.profile);
   return h(
     'main',
@@ -28,7 +28,7 @@ export function menuFrame(app, { title, back = 'lobby', body }) {
     h(
       'header',
       { class: 'menu-header' },
-      back ? h('button', { class: 'btn btn-back', type: 'button', onClick: () => app.go(back) }, '← 뒤로') : null,
+      back ? h('button', { class: 'btn btn-back', type: 'button', onClick: () => app.go(back, backParams) }, '← 뒤로') : null,
       h('h1', { class: 'menu-title' }, title),
       currencyBar(app.profile),
     ),

@@ -29,6 +29,11 @@ These are review assets; the game does not load them yet.
 22. `22-dal-8-direction-48x48-grid-review.png` — Claude prompt-based 4×2 sheet normalized to a 48×48 logical grid, enlarged 8×
 23. `23-dal-8dir-readable-32color-review.png` — readability revision with a reduced shared palette and binary transparency
 24. `24-dal-8dir-brighter-skin-review.png` — localized brighter-skin variant of the readability revision
+25. `25-mujin-character-reference.png` — user-provided unmasked male protagonist reference
+26. `26-mujin-8dir-48x48-review.png` — 4×2 eight-direction idle atlas at the game's 48×48 cell size
+27. `27-mujin-8dir-48x48-review-8x.png` — enlarged 8× review sheet for the same atlas
+28. `28-mujin-front-idle-48.png` — front-facing 48×48 gameplay sprite candidate
+29. `29-mujin-front-idle-48-review-8x.png` — enlarged front-facing sprite preview
 
 ## Integration notes
 
@@ -42,6 +47,11 @@ These are review assets; the game does not load them yet.
 - `22-dal-8-direction-48x48-grid-review.png` follows the supplied Claude prompt's 4×2 order and is 1536×768 with transparent background and 384×384 cells (48×48 logical pixels enlarged 8×). The poses are idle-only; inspect the facing, hair-ornament asymmetry, daggers, and per-cell grounding before approval. It does not include animation states.
 - `23-dal-8dir-readable-32color-review.png` is the revised review candidate: 1536×768, 4×2 cells, 48×48 logical pixels enlarged with exact 8×8 blocks, transparent/opaque alpha only, and 15 total colors including transparency. Direction-specific ornament visibility, boot-row alignment, and dagger-tip margins still need visual approval before this replaces the source reference.
 - `24-dal-8dir-brighter-skin-review.png` changes only the two skin-palette entries in `23` to lighter peach tones. The 1536×768 dimensions, 15-color palette, 8×8 logical-pixel blocks, and transparent background are preserved.
+- `26`–`29` are review candidates for the second, unmasked male protagonist. The name **Mujin (무진)** was confirmed by the user on 2026-10-28; no additional lore is implied. The sheet is integrated at `public/assets/characters/mujin/mujin_8dir_48.png`, and file `25` is unusable as a portrait because it has a baked-in checkerboard (it is byte-identical to `16`); the select-screen portrait uses `18` instead. `26` is a 192×96 transparent 4×2 atlas with 48×48 cells, aligned to a common feet baseline/center and using 19 colors including transparency. `27` and `29` are nearest-neighbor 8× previews.
 - Verify their 2.5-head proportion and inspect the masked animation sheet's actual frame count, alignment, and cell boundaries before runtime integration.
 - Confirm that the ground texture tiles cleanly at its edges and that the prop sheet separates into usable transparent sprites.
 - These concept assets do not establish new character factions, backstories, or abilities.
+
+30. `30-dal-character-select-proportion-review.png` — Dal character-select proportion candidate, adjusted toward Mujin's head-to-body scale. Used as Dal's character-select portrait since 2026-10-29 (user decision), replacing `19`.
+
+- `30` is a 1254×1254 transparent PNG concept preview. It retains Dal's identity, outfit, red ornament, hair, and twin daggers; the file has scattered stray opaque speckles in the background and leftover checkerboard colors under fully transparent pixels, so `tools/make-portraits.ps1` removes both before scaling it into `public/assets/characters/portraits/dal.png`.

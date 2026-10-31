@@ -4,11 +4,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DIRECTION_NAMES,
-  DAL_SHEET_LAYOUT,
+  CHARACTER_SHEET_LAYOUT,
   DEFAULT_DIRECTION_INDEX,
   directionIndexFromVector,
   directionName,
-  dalSheetCell,
+  characterSheetCell,
 } from '../src/direction.js';
 
 const at = (deg) => [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
@@ -83,18 +83,18 @@ test('시트 배치: 8방향이 4열 x 2행 칸에 하나씩 겹치지 않게 �
   assert.equal(DIRECTION_NAMES.length, 8);
   const seen = new Set();
   for (const name of DIRECTION_NAMES) {
-    const { col, row } = dalSheetCell(name);
+    const { col, row } = characterSheetCell(name);
     assert.ok(col >= 0 && col < 4 && row >= 0 && row < 2, `${name} 칸이 범위 밖`);
     seen.add(`${col},${row}`);
   }
   assert.equal(seen.size, 8);
-  assert.deepEqual(Object.keys(DAL_SHEET_LAYOUT).sort(), [...DIRECTION_NAMES].sort());
+  assert.deepEqual(Object.keys(CHARACTER_SHEET_LAYOUT).sort(), [...DIRECTION_NAMES].sort());
 });
 
 test('시트 배치: 시안의 칸 순서와 같다', () => {
-  assert.deepEqual(dalSheetCell('front'), { col: 0, row: 0 });
-  assert.deepEqual(dalSheetCell('back-right'), { col: 3, row: 0 });
-  assert.deepEqual(dalSheetCell('back'), { col: 0, row: 1 });
-  assert.deepEqual(dalSheetCell('front-left'), { col: 3, row: 1 });
-  assert.deepEqual(dalSheetCell('없는 이름'), { col: 0, row: 0 }, '모르는 이름은 정면 칸');
+  assert.deepEqual(characterSheetCell('front'), { col: 0, row: 0 });
+  assert.deepEqual(characterSheetCell('back-right'), { col: 3, row: 0 });
+  assert.deepEqual(characterSheetCell('back'), { col: 0, row: 1 });
+  assert.deepEqual(characterSheetCell('front-left'), { col: 3, row: 1 });
+  assert.deepEqual(characterSheetCell('없는 이름'), { col: 0, row: 0 }, '모르는 이름은 정면 칸');
 });

@@ -1,14 +1,14 @@
 // 이동 방향 벡터에서 8방향 스프라이트 방향을 고르는 순수 함수 모음. 화면(DOM)이나 게임 상태에 의존하지 않는다.
-// game.js가 이동 방향마다 호출하고, dalSprite.js가 시트 칸을 찾을 때 이 모듈의 배치를 쓴다.
+// game.js가 이동 방향마다 호출하고, characterSprite.js가 시트 칸을 찾을 때 이 모듈의 배치를 쓴다.
 // 좌표는 화면 기준이다: x는 오른쪽, y는 아래쪽(카메라 쪽)이 +이다.
 
 // 동쪽(오른쪽)에서 시작해 화면에서 시계 방향으로 45도씩 도는 순서. 인덱스 0~7.
 export const DIRECTION_NAMES = ['right', 'front-right', 'front', 'front-left', 'left', 'back-left', 'back', 'back-right'];
 
-// 달(Dal) 8방향 시트의 칸 배치(4열 x 2행). 위의 인덱스 순서와 다르므로 이름으로 찾는다.
+// 캐릭터 8방향 시트(달, 무진 공통)의 칸 배치(4열 x 2행). 위의 인덱스 순서와 다르므로 이름으로 찾는다.
 //   1행: front, front-right, right, back-right
 //   2행: back, back-left, left, front-left
-export const DAL_SHEET_LAYOUT = {
+export const CHARACTER_SHEET_LAYOUT = {
   front: { col: 0, row: 0 },
   'front-right': { col: 1, row: 0 },
   right: { col: 2, row: 0 },
@@ -58,6 +58,6 @@ export function directionName(index) {
 }
 
 // 방향 이름으로 시트의 칸(열/행)을 찾는다. 알 수 없는 이름이면 정면 칸.
-export function dalSheetCell(name) {
-  return DAL_SHEET_LAYOUT[name] ?? DAL_SHEET_LAYOUT.front;
+export function characterSheetCell(name) {
+  return CHARACTER_SHEET_LAYOUT[name] ?? CHARACTER_SHEET_LAYOUT.front;
 }
